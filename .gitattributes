@@ -1,0 +1,3 @@
+# The question banks are CRLF on this machine. Without this, a checkout on
+# another OS rewrites every line and makes diffs unreadable.
+* -text

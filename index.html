@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security+ Quiz</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- HOME -->
+<section id="view-home" class="view">
+  <main class="view-main">
+    <div class="home-wrap">
+      <span class="home-badge">CompTIA SY0-701</span>
+      <h1 class="home-title">Security+ Quiz</h1>
+      <p class="home-sub">Pick a domain, pick how many questions, and drill until it sticks.</p>
+
+      <button id="mock-btn" class="mock-card">
+        <span class="mock-flag">&#9201;</span>
+        <span>
+          <strong>Mock Exam</strong>
+          <div class="mock-sub" id="mock-sub">90 questions &middot; 90 minutes &middot; exam-weighted</div>
+        </span>
+      </button>
+
+      <button id="weak-btn" class="weak-card">
+        <span class="weak-flag">&#9873;</span>
+        <span>
+          <strong>Weak Questions</strong>
+          <div class="weak-sub" id="weak-count">0 questions flagged</div>
+        </span>
+      </button>
+
+      <div class="domain-cards" id="domain-cards"></div>
+
+      <div class="import-row">
+        <button id="export-results-btn" class="import-btn">Export Results</button>
+        <button id="reset-progress-btn" class="import-btn">Reset Progress</button>
+      </div>
+      <div id="log-summary" class="log-summary">No completed sessions logged</div>
+    </div>
+  </main>
+</section>
+
+<!-- QUIZ SETUP -->
+<section id="view-setup" class="view hidden">
+  <header class="topbar">
+    <button class="back-btn" data-nav="home">&larr; Home</button>
+    <div class="topbar-title">
+      <div>
+        <div id="setup-name" class="topbar-name"></div>
+        <div id="setup-count" class="topbar-tagline"></div>
+      </div>
+    </div>
+    <span class="topbar-spacer"></span>
+  </header>
+  <main class="view-main">
+    <div class="setup-wrap">
+      <p class="setup-label">How many questions?</p>
+      <p class="setup-hint">Questions are drawn at random and the answer order is shuffled every time.</p>
+      <div class="setup-options" id="setup-options"></div>
+      <div class="setup-custom">
+        <label for="custom-count">Or enter a number:</label>
+        <input type="number" id="custom-count" min="1" step="1" placeholder="e.g. 35">
+        <button class="setup-start" id="custom-start">Start</button>
+      </div>
+    </div>
+  </main>
+</section>
+
+<!-- QUIZ -->
+<section id="view-quiz" class="view hidden">
+  <header class="quiz-header">
+    <div class="quiz-header-title">
+      <span id="quiz-icon" class="quiz-icon">&#128737;&#65039;</span>
+      <div>
+        <div id="quiz-cert-name" class="quiz-cert-name">Security+ SY0-701</div>
+        <div id="quiz-module-name" class="quiz-module-name"></div>
+      </div>
+    </div>
+    <div class="quiz-timer hidden" id="quiz-timer">90:00</div>
+    <button class="quit-btn" data-nav="home">Quit Quiz</button>
+  </header>
+  <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+
+  <div class="quiz-body">
+    <div class="quiz-content">
+      <div class="q-counter-badge" id="q-counter-badge">1</div>
+      <div class="q-counter" id="q-counter">Question 1 / 10</div>
+
+      <div class="q-card">
+        <p class="q-text" id="q-text"></p>
+        <pre class="q-exhibit" id="q-exhibit" hidden></pre>
+        <figure class="q-figure" id="q-figure" hidden>
+          <img id="q-figure-img" alt="">
+        </figure>
+        <div class="confidence-picker" id="confidence-picker">
+          <span class="confidence-label">Before answering, how confident are you?</span>
+          <div class="confidence-options">
+            <button type="button" class="confidence-btn" data-confidence="sure">Sure</button>
+            <button type="button" class="confidence-btn" data-confidence="unsure">Unsure</button>
+            <button type="button" class="confidence-btn" data-confidence="guessed">Guessing</button>
+          </div>
+        </div>
+        <div class="q-answers" id="q-answers"></div>
+
+        <div class="q-feedback hidden" id="q-feedback">
+          <div class="feedback-banner" id="feedback-banner"></div>
+          <p class="feedback-explain" id="feedback-explain"></p>
+        </div>
+      </div>
+
+      <p class="kbd-hint">
+        <kbd>1</kbd>&ndash;<kbd>3</kbd> confidence &middot;
+        <kbd>A</kbd>&ndash;<kbd>D</kbd> answer &middot;
+        <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate
+      </p>
+    </div>
+  </div>
+
+  <footer class="quiz-footer">
+    <button class="footer-btn" id="prev-btn">&larr; Prev</button>
+    <button class="footer-btn footer-btn-primary hidden" id="next-btn">Next &rarr;</button>
+    <button class="footer-btn footer-btn-primary hidden" id="finish-btn">Finish</button>
+  </footer>
+</section>
+
+<!-- RESULTS -->
+<section id="view-results" class="view hidden">
+  <main class="view-main">
+    <div class="results-wrap">
+      <h2 class="results-title">Session Complete</h2>
+      <p class="results-source" id="results-source"></p>
+      <div class="results-verdict" id="results-verdict"></div>
+      <div class="results-score" id="results-score"></div>
+      <div class="results-stats" id="results-stats"></div>
+
+      <div class="results-domains hidden" id="results-domains"></div>
+
+      <div class="results-review" id="results-review"></div>
+
+      <div class="results-actions">
+        <button class="footer-btn footer-btn-primary" id="retry-weak-btn">Retry Wrong / Unsure / Guessed</button>
+        <button class="footer-btn" id="retry-same-btn">New Set, Same Domain</button>
+        <button class="footer-btn" data-nav="home">Home</button>
+      </div>
+    </div>
+  </main>
+</section>
+
+<script src="domains.js"></script>
+<script src="questions/domain1.js"></script>
+<script src="questions/domain2.js"></script>
+<script src="questions/domain3.js"></script>
+<script src="questions/domain4.js"></script>
+<script src="questions/domain5.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
