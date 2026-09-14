@@ -6,3 +6,8 @@
 Thumbs.db
 desktop.ini
 .DS_Store
+
+# Local working report from tools/classify_objectives.py. Regenerate with
+# "python tools/classify_objectives.py". Kept off GitHub because it quotes
+# question stems and this repo is public.
+tools/objective-review.md

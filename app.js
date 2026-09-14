@@ -6,6 +6,13 @@
 
   const PROGRESS_KEY = "secplus_progress_v1";
   const RESULTS_KEY = "secplus_results_v1";
+  // Objective tags live in questions/objectives.js, keyed by question id, built
+  // by tools/classify_objectives.py. Kept out of the generated banks so that
+  // re-running the extractor cannot lose them. Missing file = the app runs
+  // exactly as it did before, with the objective layer switched off.
+  const OBJ_TAGS = window.QUESTION_OBJECTIVES || {};
+  const OBJ_META = window.OBJECTIVE_META || {};
+  const HAS_OBJECTIVES = Object.keys(OBJ_TAGS).length > 0;
   const LETTERS = ["A", "B", "C", "D", "E", "F"];
   const PASS_MARK = 75; // CompTIA scales to 750/900; 75% is the usual study proxy.
 
@@ -73,6 +80,55 @@
   function saveProgress(store) {
     writeKey(PROGRESS_KEY, JSON.stringify(store));
   }
+  /* ---------------- objective helpers ----------------
+     A question's objective (1.1 - 5.6) is the subcategory the exam itself is
+     organised by, which is a finer grain than the five domains. "Domain 2 at
+     40%" says study domain 2; "2.3 at 0/3 while 2.1 is 6/6" says what to read
+     tonight. */
+  function objectiveOf(q) {
+    const tag = OBJ_TAGS[q.id];
+    return tag ? tag.o : "";
+  }
+  function objectiveConfidence(q) {
+    const tag = OBJ_TAGS[q.id];
+    return tag ? tag.c : "";
+  }
+  function objectiveName(oid) {
+    return (OBJ_META[oid] && OBJ_META[oid].name) || "";
+  }
+  // Items of one domain, grouped by objective, in objective order.
+  function objectiveGroups(domain) {
+    const groups = {};
+    getBank(domain.bank).forEach(q => {
+      const oid = objectiveOf(q) || "unsorted";
+      (groups[oid] = groups[oid] || []).push({ q, domain });
+    });
+    return Object.keys(groups).sort().map(oid => ({
+      oid,
+      name: oid === "unsorted" ? "Not yet categorised" : objectiveName(oid),
+      items: groups[oid],
+      // How many of this objective's questions are currently flagged weak --
+      // the number that decides where to spend the next session.
+      weak: groups[oid].filter(it => isWeak(loadProgress()[it.q.id])).length,
+      // Running accuracy from the progress store, across every past session.
+      stats: objectiveStats(groups[oid])
+    }));
+  }
+  // Lifetime asked/correct for a set of items, from the per-question store.
+  function objectiveStats(items) {
+    const store = loadProgress();
+    let asked = 0, correct = 0, shaky = 0;
+    items.forEach(it => {
+      const e = store[it.q.id];
+      if (!e) return;
+      const seen = (e.correctCount || 0) + (e.wrongCount || 0);
+      asked += seen;
+      correct += e.correctCount || 0;
+      if (isWeak(e)) shaky++;
+    });
+    return { asked, correct, shaky, percent: asked ? Math.round((correct / asked) * 100) : null };
+  }
+
   function recordAnswer(qid, correct, confidence) {
     const store = loadProgress();
     const entry = store[qid] || { correctCount: 0, wrongCount: 0, guessedCount: 0 };
@@ -274,7 +330,10 @@
         '<span class="domain-go">' +
           (count === 0 ? "Not loaded yet" : count + " q →") +
         '</span>';
-      if (count > 0) card.addEventListener("click", () => renderSetup(d));
+      // With objectives loaded, a domain opens its subcategory list first;
+      // without them, straight to the count screen as before.
+      if (count > 0) card.addEventListener("click", () =>
+        HAS_OBJECTIVES ? renderObjectives(d) : renderSetup(d));
       wrap.appendChild(card);
     });
 
@@ -314,7 +373,9 @@
     const logs = loadResultLogs();
     if (logs.length === 0) return;
     downloadJson({
-      schemaVersion: 1,
+      // v2 adds objectiveScores[] per session and objective/objectiveConfidence
+      // per question. v1 exports stay readable: the new keys are additions.
+      schemaVersion: 2,
       certification: "CompTIA Security+ SY0-701",
       exportedAt: new Date().toISOString(),
       sessionCount: logs.length,
@@ -328,6 +389,61 @@
     removeKey(RESULTS_KEY);
     renderHome();
   });
+
+  /* ---------------- OBJECTIVES (subcategories of one domain) ----------------
+     The exam publishes 28 objectives across the five domains. Drilling one at
+     a time is the difference between "I'm weak at Security Operations" and
+     "I'm weak at 4.9, using data sources in an investigation". Each row shows
+     the bank size, lifetime accuracy where there is any, and how many
+     questions are currently flagged weak. */
+  function renderObjectives(domain) {
+    const groups = objectiveGroups(domain);
+    document.getElementById("obj-domain-name").textContent = domain.num + " " + domain.name;
+    document.getElementById("obj-domain-sub").textContent =
+      groups.length + " objective" + (groups.length === 1 ? "" : "s") + " · " +
+      getBank(domain.bank).length + " questions";
+
+    const wrap = document.getElementById("objective-list");
+    wrap.innerHTML = "";
+
+    // "Whole domain" first, so the old habit of domain -> 10 questions still
+    // works, one click further along.
+    const allBtn = document.createElement("button");
+    allBtn.className = "objective-row objective-row-all";
+    allBtn.innerHTML =
+      '<span class="objective-num">All</span>' +
+      '<span class="objective-name">Whole domain, mixed</span>' +
+      '<span class="objective-meta">' + getBank(domain.bank).length + ' q →</span>';
+    allBtn.addEventListener("click", () => renderSetup(domain));
+    wrap.appendChild(allBtn);
+
+    groups.forEach(g => {
+      const row = document.createElement("button");
+      row.className = "objective-row";
+      const pct = g.stats.percent;
+      const band = pct === null ? "" : (pct >= PASS_MARK ? "pass" : (pct >= 60 ? "warn" : "fail"));
+      const scorePart = pct === null
+        ? '<span class="objective-score untried">not tried</span>'
+        : '<span class="objective-score ' + band + '">' + pct + '%</span>';
+      const weakPart = g.weak
+        ? '<span class="objective-weak">' + g.weak + ' flagged</span>'
+        : "";
+      row.innerHTML =
+        '<span class="objective-num">' + escapeHtml(g.oid) + '</span>' +
+        '<span class="objective-name">' + escapeHtml(g.name) +
+          '<span class="objective-count">' + g.items.length + ' questions' +
+          (g.stats.asked ? ' · ' + g.stats.asked + ' answered' : '') + '</span>' +
+        '</span>' +
+        '<span class="objective-meta">' + scorePart + weakPart + '</span>';
+      row.addEventListener("click", () =>
+        renderSetup(null, g.items, domain.num + " · " + g.oid + " " + g.name));
+      wrap.appendChild(row);
+    });
+
+    showView("view-objectives");
+  }
+
+  document.getElementById("obj-back-btn").addEventListener("click", () => renderHome());
 
   /* ---------------- SETUP (question count) ----------------
      `poolOverride` lets an ad-hoc set (the weak-question list) reuse this
@@ -560,6 +676,9 @@
       timeExpired: !!s.expired,
       unansweredCount: summary.unansweredN || 0,
       // Per-domain scores, so a run of exports shows which domain is moving.
+      // Per-objective scores: the finest grain the exam itself defines, and
+      // the reason this log is worth exporting at all.
+      objectiveScores: summary.byObjective || [],
       domainScores: Object.keys(byDomain || {}).sort().map(k => ({
         domain: byDomain[k].num,
         name: byDomain[k].name,
@@ -585,6 +704,10 @@
           order: i + 1,
           questionId: q.id,
           domain: item.domain ? item.domain.num : (q.domain || ""),
+          objective: objectiveOf(q),
+          // "low" means the tag was inferred from weak evidence; kept in the
+          // log so a future analysis can discount those rows.
+          objectiveConfidence: objectiveConfidence(q),
           question: q.question,
           selectedAnswer: a ? q.answers[a.selectedIndex] : null,
           correctAnswer: q.answers[q.correct],
@@ -632,9 +755,27 @@
       if (!a.correct || a.confidence !== "sure") reviewItems.push({ item, answer: a });
     });
 
+    // Per-objective tallies for this session, for the log and the breakdown.
+    const byObjective = {};
+    s.questions.forEach((item, i) => {
+      const oid = objectiveOf(item.q);
+      if (!oid) return;
+      if (!byObjective[oid]) byObjective[oid] = { objective: oid, name: objectiveName(oid), asked: 0, correct: 0 };
+      byObjective[oid].asked++;
+      const a = s.answers[i];
+      if (a && a.correct) byObjective[oid].correct++;
+    });
+    const objectiveRows = Object.keys(byObjective).sort().map(k => {
+      const r = byObjective[k];
+      return Object.assign({}, r, {
+        accuracyPercent: r.asked ? Math.round((r.correct / r.asked) * 1000) / 10 : 0
+      });
+    });
+
     const total = s.questions.length;
     const percent = total ? Math.round((correctN / total) * 1000) / 10 : 0;
-    const summary = { correctN, wrongN, unsureN, guessedN, percent, unansweredN };
+    const summary = { correctN, wrongN, unsureN, guessedN, percent, unansweredN,
+                      byObjective: objectiveRows };
     saveCompletedSession(s, summary, byDomain);
 
     document.getElementById("results-source").textContent = s.sourceLabel +
@@ -687,6 +828,36 @@
     } else {
       domainWrap.innerHTML = "";
       domainWrap.classList.add("hidden");
+    }
+
+    // Objective breakdown. Shown whenever a session touched more than one
+    // objective, which includes every domain run and every mock -- this is the
+    // granularity the domain table cannot give.
+    const objWrap = document.getElementById("results-objectives");
+    if (objectiveRows.length > 1) {
+      const weakestObj = objectiveRows.slice().sort((a, b) =>
+        (a.correct / a.asked) - (b.correct / b.asked))[0];
+      objWrap.innerHTML =
+        '<p class="review-heading">Score by objective</p>' +
+        objectiveRows.map(r => {
+          const pct = r.asked ? Math.round((r.correct / r.asked) * 100) : 0;
+          const band = pct >= PASS_MARK ? "pass" : (pct >= 60 ? "warn" : "fail");
+          return '<div class="domain-row">' +
+            '<span class="domain-row-num">' + escapeHtml(r.objective) + '</span>' +
+            '<span class="domain-row-name">' + escapeHtml(r.name) + '</span>' +
+            '<span class="domain-row-bar"><span class="domain-row-fill ' + band +
+              '" style="width:' + pct + '%"></span></span>' +
+            '<span class="domain-row-score ' + band + '">' + r.correct + '/' + r.asked +
+              ' · ' + pct + '%</span>' +
+          '</div>';
+        }).join("") +
+        '<p class="domain-hint">Weakest objective: <b>' +
+          escapeHtml(weakestObj.objective + " " + weakestObj.name) +
+          '</b> — drill that one next.</p>';
+      objWrap.classList.remove("hidden");
+    } else {
+      objWrap.innerHTML = "";
+      objWrap.classList.add("hidden");
     }
 
     const review = document.getElementById("results-review");

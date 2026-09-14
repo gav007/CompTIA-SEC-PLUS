@@ -738,3 +738,77 @@ button {
   font-size: 0.9rem;
   color: var(--text-muted);
 }
+
+/* --- Objective picker -------------------------------------------------
+   One row per exam objective within a domain. The exam publishes 28 of
+   these across the five domains, and they are the grain at which "what
+   should I study tonight" is actually answerable -- a domain score of 40%
+   hides a 0/3 objective sitting beside a 6/6 one. Colour bands match the
+   results breakdown deliberately: same meaning, same colour, everywhere. */
+.objective-list { display: flex; flex-direction: column; gap: 8px; }
+.objective-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: left;
+  cursor: pointer;
+}
+.objective-row:hover { border-color: var(--navy); }
+.objective-row-all {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.objective-row-all .objective-num,
+.objective-row-all .objective-meta { color: #fff; }
+.objective-num {
+  flex: 0 0 38px;
+  font-weight: 700;
+  color: var(--navy);
+  font-size: 0.95rem;
+}
+.objective-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+/* The bank size, and how many of them have been answered before. Small on
+   purpose: it is context for the score, not the headline. */
+.objective-count {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.objective-meta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 0.85rem;
+}
+.objective-score { font-weight: 700; }
+.objective-score.pass { color: var(--green); }
+.objective-score.warn { color: #a8781f; }
+.objective-score.fail { color: var(--red); }
+/* "not tried" has to read as absence of data, not as a bad score. */
+.objective-score.untried {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 0.8rem;
+}
+.objective-weak {
+  font-size: 0.75rem;
+  color: var(--red);
+}
+@media (max-width: 560px) {
+  .objective-num { flex-basis: 32px; font-size: 0.85rem; }
+  .objective-name { font-size: 0.85rem; }
+}

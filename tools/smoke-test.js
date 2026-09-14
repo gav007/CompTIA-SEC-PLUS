@@ -93,6 +93,37 @@ setTimeout(() => {
     if (posN) console.log(`        (${posN} question(s) with a positional option)`);
   });
 
+  /* ---- Objective tags: the subcategory layer. Everything here is skipped
+     cleanly when questions/objectives.js is absent, because the app is
+     supposed to fall back to plain domain drilling in that case. */
+  console.log("\n== Objective tags ==");
+  const tags = w.QUESTION_OBJECTIVES || {};
+  const objMeta = w.OBJECTIVE_META || {};
+  const hasObjectives = Object.keys(tags).length > 0;
+  if (!hasObjectives) {
+    console.log("  SKIP  no objectives.js loaded (app falls back to domains)");
+  } else {
+    const allIds = new Set();
+    loaded.forEach(dm => w.QUESTION_BANKS[dm.bank].forEach(q => allIds.add(q.id)));
+    const tagged = [...allIds].filter(id => tags[id]);
+    check("every loaded question has an objective tag",
+      tagged.length === allIds.size, `${tagged.length}/${allIds.size}`);
+    check("every tag names a known objective",
+      Object.values(tags).every(t => !!objMeta[t.o]),
+      Object.values(tags).filter(t => !objMeta[t.o]).slice(0, 3).map(t => t.o).join(","));
+    // A tag must belong to the domain its question sits in -- a 5.x tag on a
+    // domain 2 question would scatter a domain's questions across the picker.
+    let crossDomain = [];
+    loaded.forEach(dm => w.QUESTION_BANKS[dm.bank].forEach(q => {
+      const t = tags[q.id];
+      if (t && objMeta[t.o] && objMeta[t.o].domain !== dm.num) crossDomain.push(q.id);
+    }));
+    check("no tag points at another domain's objective",
+      crossDomain.length === 0, crossDomain.slice(0, 3).join(","));
+    check("confidence is one of high/low/manual",
+      Object.values(tags).every(t => ["high", "low", "manual"].includes(t.c)));
+  }
+
   console.log("\n== Home ==");
   check("home visible", vis("view-home"));
   const cards = d.querySelectorAll(".domain-card");
@@ -101,6 +132,20 @@ setTimeout(() => {
 
   console.log("\n== Setup ==");
   [...cards].find(c => !c.disabled).click();
+  if (hasObjectives) {
+    // With tags loaded, a domain card opens the objective picker first.
+    check("domain card opens the objective picker", vis("view-objectives"));
+    const rows = d.querySelectorAll(".objective-row");
+    check("picker has an All row plus one per objective", rows.length > 1, rows.length);
+    check("first row is the whole-domain row",
+      rows[0].classList.contains("objective-row-all"));
+    const nums = [...rows].slice(1).map(r => r.querySelector(".objective-num").textContent);
+    check("objective rows are in objective order",
+      JSON.stringify(nums) === JSON.stringify(nums.slice().sort()), nums.join(","));
+    check("every objective row states a question count",
+      [...rows].slice(1).every(r => /\d+ questions/.test(r.textContent)));
+    rows[0].click();   // "Whole domain, mixed" -> the old path
+  }
   check("setup visible", vis("view-setup"));
   const poolSize = loaded[0] ? w.QUESTION_BANKS[loaded[0].bank].length : 0;
   check("pool size reported", $("setup-count").textContent.startsWith(String(poolSize)), $("setup-count").textContent);
@@ -187,6 +232,62 @@ setTimeout(() => {
   check("2 flagged on home", /^2 questions flagged/.test($("weak-count").textContent), $("weak-count").textContent);
   check("export enabled", !$("export-results-btn").disabled);
 
+  /* Objective drilling runs AFTER weak tracking on purpose: it completes a
+     fresh session, which would otherwise replace the 6-question results that
+     the retry-weak test above depends on. */
+  console.log("\n== Objective drilling and logging ==");
+  if (!hasObjectives) {
+    console.log("  SKIP  no objectives.js loaded");
+  } else {
+    // Drill a single objective end to end, then prove the log carries the
+    // per-objective score -- the whole point of the change.
+    d.querySelector('.quit-btn[data-nav="home"]')?.click();
+    $("mock-btn"); // no-op, keeps the view on home
+    [...d.querySelectorAll(".domain-card")].find(c => !c.disabled).click();
+    const objRows = [...d.querySelectorAll(".objective-row")].slice(1);
+    const target = objRows.find(r => {
+      const n = parseInt(r.textContent.match(/(\d+) questions/)[1], 10);
+      return n >= 4;
+    }) || objRows[0];
+    const targetNum = target.querySelector(".objective-num").textContent;
+    target.click();
+    check("objective opens the count screen", vis("view-setup"));
+    check("setup names the objective",
+      $("setup-name").textContent.includes(targetNum), $("setup-name").textContent);
+    d.querySelectorAll(".setup-opt")[0].click();   // smallest preset
+    check("objective session started", vis("view-quiz"));
+    const drilled = [];
+    for (let i = 0; i < 200; i++) {
+      const src = currentSource();
+      if (src) drilled.push(src.id);
+      d.querySelector('.confidence-btn[data-confidence="sure"]').click();
+      answerCorrectly();
+      if (!vis("finish-btn")) press("ArrowRight"); else break;
+    }
+    check("every question drawn belongs to that objective",
+      drilled.length > 0 && drilled.every(id => tags[id] && tags[id].o === targetNum),
+      drilled.map(id => tags[id] && tags[id].o).filter((v, i, a) => a.indexOf(v) === i).join(","));
+    $("finish-btn").click();
+    check("objective session results shown", vis("view-results"));
+    const objLogs = JSON.parse(w.localStorage.getItem("secplus_results_v1") || "[]");
+    const last = objLogs[objLogs.length - 1];
+    check("log carries objectiveScores", Array.isArray(last.objectiveScores));
+    check("single-objective session logs exactly that objective",
+      last.objectiveScores.length === 1 && last.objectiveScores[0].objective === targetNum,
+      JSON.stringify(last.objectiveScores));
+    check("logged questions carry their objective",
+      last.questions.every(q => q.objective === targetNum));
+    d.querySelector('[data-nav="home"]')?.click();
+  }
+
+  /* With objective tags loaded, a domain card opens the picker rather than the
+     count screen. Everything below drills a whole domain, so it goes through
+     the "All" row when the picker is in the way. */
+  const openWholeDomain = index => {
+    d.querySelectorAll(".domain-card")[index].click();
+    if (vis("view-objectives")) d.querySelector(".objective-row-all").click();
+  };
+
   console.log("\n== Positional options stay pinned ==");
   // "All of the above" must never be shuffled out of its authored slot.
   const pinBank = loaded.map(dm => w.QUESTION_BANKS[dm.bank])
@@ -199,7 +300,7 @@ setTimeout(() => {
     let pinOk = true, sightings = 0;
     outer:
     for (let round = 0; round < 6; round++) {
-      d.querySelectorAll(".domain-card")[w.DOMAINS.indexOf(pinDomain)].click();
+      openWholeDomain(w.DOMAINS.indexOf(pinDomain));
       const opts = d.querySelectorAll(".setup-opt");
       opts[opts.length - 1].click(); // "All"
       for (let i = 0; i < pinBank.length; i++) {
@@ -223,11 +324,16 @@ setTimeout(() => {
   console.log("\n== Shuffling ==");
   const seen = new Set();
   for (let t = 0; t < 8; t++) {
-    d.querySelectorAll(".domain-card")[w.DOMAINS.indexOf(loaded[0])].click();
+    openWholeDomain(w.DOMAINS.indexOf(loaded[0]));
     d.querySelectorAll(".setup-opt")[0].click();
-    seen.add([...d.querySelectorAll(".q-answer")].map(b => b.textContent).join("|"));
+    const rendered = [...d.querySelectorAll(".q-answer")].map(b => b.textContent).join("|");
+    seen.add(rendered);
     d.querySelector('.quit-btn[data-nav="home"]').click();
   }
+  // Guard against the old false pass: an empty answer list would have made
+  // every round identical *and* meaningless, so require real content too.
+  check("a question actually rendered in the shuffle rounds",
+    [...seen].every(s => s.length > 0), [...seen][0] === "" ? "empty render" : "ok");
   check("question/answer order varies between sessions", seen.size > 1, seen.size + " distinct starts");
 
   /* ---- Mock exam: 90 questions in 90 minutes, weighted like the real exam.
@@ -274,8 +380,21 @@ setTimeout(() => {
     check("mock results shown", vis("view-results"));
     check("per-domain breakdown rendered",
       !$("results-domains").classList.contains("hidden") &&
-      d.querySelectorAll(".domain-row").length === 5,
-      d.querySelectorAll(".domain-row").length + " rows");
+      $("results-domains").querySelectorAll(".domain-row").length === 5,
+      $("results-domains").querySelectorAll(".domain-row").length + " rows");
+    if (hasObjectives) {
+      // A 90-question weighted mock touches many objectives, so the
+      // objective table must render alongside the domain one.
+      const objRowsN = $("results-objectives").querySelectorAll(".domain-row").length;
+      check("per-objective breakdown rendered on a mock",
+        !$("results-objectives").classList.contains("hidden") && objRowsN > 5, objRowsN + " rows");
+      check("mock log carries objectiveScores",
+        (() => {
+          const l = JSON.parse(w.localStorage.getItem("secplus_results_v1") || "[]")
+            .filter(x => x.mode === "mock").pop();
+          return !!l && Array.isArray(l.objectiveScores) && l.objectiveScores.length > 5;
+        })());
+    }
     check("all-correct mock scores 100%", $("results-score").textContent.includes("90 / 90"),
       $("results-score").textContent);
 

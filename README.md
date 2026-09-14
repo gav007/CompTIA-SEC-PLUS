@@ -34,8 +34,12 @@ then open http://localhost:8731
   published exam weight (11 / 20 / 16 / 25 / 18). The clock does not pause; at
   zero the session ends and anything unanswered scores as wrong, like the real
   thing. Results add a **score-by-domain breakdown** naming your weakest domain.
-- **Pick a domain**, then **pick how many questions** — 10 / 15 / 20 / 25 / 50 /
-  100 / All, or type any custom number.
+- **Pick a domain**, then **pick an objective**, then **pick how many questions**
+  — 10 / 15 / 20 / 25 / 50 / 100 / All, or type any custom number. The objective
+  list is the exam's own subcategories (1.1 … 5.6) and shows, per objective, the
+  bank size, your running accuracy across all past sessions, and how many
+  questions are currently flagged weak. "Whole domain, mixed" at the top keeps
+  the old behaviour one click away.
 - Questions are drawn at random and **answer order is reshuffled every session**,
   so you learn the material rather than the position of the right box.
 - **Confidence gate**: you must say Sure / Unsure / Guessing *before* the answer
@@ -43,7 +47,8 @@ then open http://localhost:8731
   lucky guess gets flagged as a gap even though it scored as correct.
 - Immediate feedback with the book's full explanation after each answer.
 - **Results**: score against a 75% target, correct/wrong/unsure/guessed
-  breakdown, and a review list of everything worth revisiting.
+  breakdown, a **score-by-objective table** naming your weakest objective, and a
+  review list of everything worth revisiting.
 - **Weak Questions** on the home screen pools everything you got wrong or
   weren't sure about, across every past session.
 - **Export Results** dumps the full session log as JSON.
@@ -63,13 +68,38 @@ index.html            all four views (home, setup, quiz, results)
 style.css             design language shared with Apps/Cert_Quiz_App
 domains.js            registry of the five SY0-701 exam domains
 app.js                quiz engine, progress store, session log
+questions/objectives.js  objective tag per question id (generated)
 questions/domain1.js  150 questions — Domain 1.0 (loaded)
 questions/domain2.js  187 questions — Domain 2.0 (loaded)
 questions/domain3.js  226 questions — Domain 3.0 (loaded)
 questions/domain4.js  215 questions — Domain 4.0 (loaded)
 questions/domain5.js  227 questions — Domain 5.0 (loaded)
 questions/img/        figures the book prints alongside 9 questions
+tools/classify_objectives.py  builds objectives.js from the exam objectives
+tools/objective-review.md     what landed where, and what needed a human
 ```
+
+## Objective tagging
+
+The book groups its review questions by chapter, not by exam objective, so the
+objective tags are derived rather than given. `tools/classify_objectives.py`
+scores every question against the term lists in
+`../SECURITY_PLUS_SY0-701_EXAM_OBJECTIVES_AI.md`, choosing only between the
+objectives of the question's own domain.
+
+```
+python tools/classify_objectives.py          # all five domains
+python tools/classify_objectives.py 2        # one domain
+```
+
+All 1,003 questions are tagged: 795 by clear term evidence, 167 on weaker
+evidence (recorded as `low`), and 41 pinned by hand in `MANUAL_TAGS`. Tags live
+in their own file because `questions/domain<N>.js` is generated — tags written
+into a bank would vanish on the next `extract_domain.py` run.
+
+**The tags are a study aid, not an authority.** Hand-checking samples found
+roughly one arguable placement in fourteen, usually a question that straddles
+two objectives. Corrections go in `MANUAL_TAGS` and survive every re-run.
 
 ## Current content
 
