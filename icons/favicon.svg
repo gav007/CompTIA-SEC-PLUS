@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Security+ Quiz">
+  <!-- Gold shield, navy tick. Same geometry as tools/make_icons.py, which
+       rasterises the PNG sizes from these coordinates. Deliberately text-free:
+       a favicon is often 16px, where "SEC+" is a smudge but a shield still
+       reads. Colours are --navy and --gold from style.css. -->
+  <title>Security+ Quiz</title>
+  <rect width="64" height="64" rx="12" fill="#1b2a3d"/>
+  <path d="M14 9 H50 V31 C50 42 41 49 32 55 C23 49 14 42 14 31 Z" fill="#d9a441"/>
+  <path d="M23 32 l6 7 l12 -15" fill="none" stroke="#1b2a3d" stroke-width="5.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

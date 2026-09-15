@@ -124,6 +124,64 @@ setTimeout(() => {
       Object.values(tags).every(t => ["high", "low", "manual"].includes(t.c)));
   }
 
+  /* ---- Icons and install metadata. Checked on disk rather than over HTTP so
+     this stays synchronous, and because the failure that actually bites is a
+     head reference pointing at a file that isn't there. Paths must be
+     relative: the site is served from /CompTIA-SEC-PLUS/, so a leading slash
+     resolves to the domain root and 404s. */
+  console.log("\n== Icons and install metadata ==");
+  {
+    const root = path.join(__dirname, "..");
+    const head = d.head;
+    const svgIcon = head.querySelector('link[rel="icon"][type="image/svg+xml"]');
+    const pngIcon = head.querySelector('link[rel="icon"][type="image/png"]');
+    const apple = head.querySelector('link[rel="apple-touch-icon"]');
+    const manifestLink = head.querySelector('link[rel="manifest"]');
+    const theme = head.querySelector('meta[name="theme-color"]');
+
+    check("svg favicon linked", !!svgIcon && /favicon\.svg$/.test(svgIcon.getAttribute("href")));
+    check("png favicon linked", !!pngIcon);
+    check("apple-touch-icon linked (iOS home screen needs PNG)", !!apple);
+    check("manifest linked", !!manifestLink);
+    check("theme-color set", !!theme && theme.getAttribute("content") === "#1b2a3d",
+      theme && theme.getAttribute("content"));
+    check("home-screen title set",
+      !!head.querySelector('meta[name="apple-mobile-web-app-title"]'));
+
+    const refs = [svgIcon, pngIcon, apple, manifestLink].filter(Boolean)
+      .map(el => el.getAttribute("href"));
+    check("every icon/manifest path is relative",
+      refs.every(h => !h.startsWith("/") && !/^https?:/.test(h)), refs.join(" "));
+    const missing = refs.filter(h => !fs.existsSync(path.join(root, h)));
+    check("every referenced file exists on disk", missing.length === 0, missing.join(" "));
+
+    // The manifest is what turns "bookmark" into "installed app" on Android.
+    let manifest = null;
+    try {
+      manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
+    } catch (e) { /* reported by the checks below */ }
+    check("manifest parses as JSON", !!manifest);
+    if (manifest) {
+      check("manifest start_url is relative", manifest.start_url === "./", manifest.start_url);
+      check("manifest is standalone", manifest.display === "standalone", manifest.display);
+      const sizes = (manifest.icons || []).map(i => i.sizes);
+      check("manifest has 192 and 512 icons",
+        sizes.includes("192x192") && sizes.includes("512x512"), sizes.join(","));
+      check("manifest has a maskable icon",
+        (manifest.icons || []).some(i => (i.purpose || "").includes("maskable")));
+      const iconMissing = (manifest.icons || [])
+        .filter(i => !fs.existsSync(path.join(root, i.src))).map(i => i.src);
+      check("every manifest icon exists on disk", iconMissing.length === 0, iconMissing.join(" "));
+      // A PNG that isn't a PNG is a silently blank home-screen icon.
+      const notPng = (manifest.icons || []).filter(i => {
+        const f = path.join(root, i.src);
+        if (!fs.existsSync(f)) return false;
+        return fs.readFileSync(f).slice(0, 8).toString("binary") !== "\x89PNG\r\n\x1a\n";
+      }).map(i => i.src);
+      check("manifest icons are real PNGs", notPng.length === 0, notPng.join(" "));
+    }
+  }
+
   console.log("\n== Home ==");
   check("home visible", vis("view-home"));
   const cards = d.querySelectorAll(".domain-card");

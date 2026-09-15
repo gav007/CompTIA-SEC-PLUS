@@ -77,7 +77,34 @@ questions/domain5.js  227 questions — Domain 5.0 (loaded)
 questions/img/        figures the book prints alongside 9 questions
 tools/classify_objectives.py  builds objectives.js from the exam objectives
 tools/objective-review.md     what landed where, and what needed a human
+icons/favicon.svg             the mark, hand-written; reference for the PNGs
+icons/*.png                   favicon, apple-touch and maskable sizes
+manifest.webmanifest          install metadata for "add to home screen"
+tools/make_icons.py           regenerates icons/*.png from the same geometry
 ```
+
+## Save it to a phone or desktop
+
+The page carries a favicon, an `apple-touch-icon` and a web manifest, so it
+installs as a standalone app rather than a browser bookmark:
+
+- **iPhone/iPad:** Safari → Share → *Add to Home Screen*. Appears as "SEC+ Quiz".
+- **Android:** Chrome → menu → *Install app* (or *Add to Home screen*).
+- **Desktop Chrome/Edge:** the install icon in the address bar.
+
+Icons are a gold shield with a navy tick, using the same `--navy` / `--gold` as
+the rest of the app, and no text — a favicon is often 16px, where lettering is a
+smudge. Regenerate the PNGs with:
+
+```
+python tools/make_icons.py
+```
+
+That script rasterises the same coordinates as `icons/favicon.svg` using only
+the standard library, so there is still nothing to install to build this repo.
+The masked icons (`apple-touch-icon.png`, `icon-512-maskable.png`) are
+full-bleed squares with the shield drawn smaller, because iOS and Android apply
+their own mask — rounding them first clips the corners twice.
 
 ## Objective tagging
 
