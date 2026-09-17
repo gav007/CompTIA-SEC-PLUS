@@ -44,6 +44,14 @@
         </span>
       </button>
 
+      <button id="pbq-btn" class="mock-card pbq-card">
+        <span class="mock-flag">&#9881;</span>
+        <span>
+          <strong>Performance-Based Questions</strong>
+          <div class="mock-sub" id="pbq-sub">Simulations &middot; partial credit</div>
+        </span>
+      </button>
+
       <button id="weak-btn" class="weak-card">
         <span class="weak-flag">&#9873;</span>
         <span>
@@ -152,6 +160,8 @@
           <p class="hint-text" id="hint-text" hidden></p>
         </div>
         <div class="q-answers" id="q-answers"></div>
+        <!-- PBQ simulations render here instead of the A-D answer buttons. -->
+        <div class="q-pbq" id="q-pbq" hidden></div>
 
         <div class="q-feedback hidden" id="q-feedback">
           <div class="feedback-banner" id="feedback-banner"></div>
@@ -209,6 +219,9 @@
      tools/classify_objectives.py; must load before app.js. Remove this line
      and the app falls back to plain domain drilling. -->
 <script src="questions/objectives.js"></script>
+<!-- Original performance-based questions. Remove this line and the PBQ card
+     simply disables itself. -->
+<script src="questions/pbq.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

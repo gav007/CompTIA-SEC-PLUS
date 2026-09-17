@@ -840,3 +840,72 @@ button {
   .objective-num { flex-basis: 32px; font-size: 0.85rem; }
   .objective-name { font-size: 0.85rem; }
 }
+
+/* --- Performance-based questions -----------------------------------------
+   Tap-to-select, tap-to-place: HTML drag-and-drop does not work on phones.
+   Same calm navy / pale-blue language as the answer cards; right and wrong
+   carry a check or cross glyph as well as colour. */
+.pbq-card { background: var(--navy-2); border-color: var(--navy-2); }
+.pbq-card .mock-flag { color: #b7cce3; }
+
+.q-pbq { margin-top: 4px; }
+.pbq-instructions { color: var(--text-muted); font-size: 0.86rem; margin: 0 0 10px; }
+.pbq-locked { color: var(--blue-strong); font-size: 0.86rem; font-weight: 700; margin: 0 0 10px; }
+
+.pbq-pool { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; padding: 10px;
+  border: 1.5px dashed var(--border-strong); border-radius: 10px; background: var(--blue-softer); }
+.pbq-chip {
+  background: #fbfcfd;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  text-align: left;
+  line-height: 1.35;
+}
+.pbq-chip:hover:not(:disabled) { background: var(--blue-soft); border-color: var(--blue-border); }
+.pbq-chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.pbq-chip.selected { border-color: var(--blue); background: #e4edf6; box-shadow: 0 0 0 2px var(--blue-border); }
+.pbq-chip:disabled { cursor: default; }
+.pbq-chip.placed { width: 100%; }
+
+.pbq-slots { margin: 0; padding-left: 26px; display: grid; gap: 6px; }
+.pbq-slots li::marker { color: var(--text-muted); font-weight: 700; }
+.pbq-empty { color: var(--text-muted); border: 1.5px dashed var(--border); border-radius: 8px; padding: 8px 12px; }
+
+.pbq-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-top: 8px; }
+.pbq-group { display: grid; gap: 6px; align-content: start; padding: 8px; border: 1px solid var(--border); border-radius: 10px; background: #f7f8fa; }
+.pbq-group-head {
+  background: white; border: 1.5px solid var(--blue-border); border-radius: 8px;
+  color: var(--blue-strong); font-weight: 700; font-size: 0.86rem; padding: 7px 10px; text-align: left;
+}
+.pbq-group-head:hover:not(:disabled) { background: var(--blue-soft); }
+.pbq-group-head:disabled { border-color: var(--border); color: var(--text); cursor: default; }
+
+.pbq-table-wrap { overflow-x: auto; }
+.pbq-table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+.pbq-table th { text-align: left; color: var(--text-muted); font-size: 0.8rem; padding: 6px 8px; border-bottom: 1.5px solid var(--border-strong); }
+.pbq-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.pbq-select { font: inherit; font-size: 0.88rem; padding: 6px 8px; border: 1.5px solid var(--border-strong); border-radius: 6px; background: #fff; color: var(--text); max-width: 100%; }
+.pbq-select:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+.pbq-right { border-color: var(--green) !important; background: var(--green-bg) !important; }
+.pbq-wrong { border-color: var(--red) !important; background: var(--red-bg) !important; }
+td.pbq-right, td.pbq-wrong { border-radius: 6px; }
+.pbq-mark { font-weight: 700; }
+.pbq-should { display: block; font-size: 0.8rem; color: var(--text-muted); margin-top: 4px; }
+
+.pbq-submit {
+  margin-top: 16px; background: var(--navy); color: white; border: none; border-radius: 8px;
+  padding: 11px 20px; font-weight: 600; font-size: 0.92rem;
+}
+.pbq-submit:disabled { opacity: 0.35; cursor: default; }
+.review-tag.pbq { background: var(--blue-soft); color: var(--blue-strong); }
+@media (max-width: 560px) {
+  .pbq-table { font-size: 0.8rem; }
+  .pbq-table th, .pbq-table td { padding: 5px 4px; }
+  .pbq-select { font-size: 0.8rem; padding: 4px 2px; }
+  td.pbq-right .pbq-mark, td.pbq-wrong .pbq-mark { display: block; }
+}

@@ -77,7 +77,7 @@ setTimeout(() => {
   // A stem pointing at a script, command, query, log entry or rule is
   // unanswerable without it. Seven shipped that way once (the exhibit sat in
   // a sidebar the extractor skipped); this keeps them from coming back.
-  const POINTS_AT_EXHIBIT = /following (script|command|query|entry)|rule reads|described as follows|entry shown here/i;
+  const POINTS_AT_EXHIBIT = /\bfollowing (script|command|query|entry)\b|\brule reads\b|\bdescribed as follows\b|\bentry shown here\b/i;
   const bare = [];
   loaded.forEach(dm => w.QUESTION_BANKS[dm.bank].forEach(q => {
     if (POINTS_AT_EXHIBIT.test(q.question) && !q.exhibit && !q.image) bare.push(q.id);
@@ -218,6 +218,7 @@ setTimeout(() => {
   check("pool size reported", $("setup-count").textContent.startsWith(String(poolSize)), $("setup-count").textContent);
   const presets = [...d.querySelectorAll(".setup-opt")].map(b => b.textContent);
   check("last preset is All(n)", presets[presets.length - 1] === `All (${poolSize})`, presets.join(","));
+  check("quick 5-question preset offered first", presets[0] === "5", presets.join(","));
   check("no preset exceeds pool",
     presets.slice(0, -1).every(p => parseInt(p, 10) < poolSize), presets.join(","));
 
@@ -407,7 +408,7 @@ setTimeout(() => {
      must be logged as hinted and stay on the weak list, even when correct. */
   console.log("\n== Hints ==");
   openWholeDomain(w.DOMAINS.indexOf(loaded[0]));
-  d.querySelectorAll(".setup-opt")[0].click();       // 10 mixed questions
+  [...d.querySelectorAll(".setup-opt")].find(b => b.textContent === "10").click();  // 10 mixed questions
   check("hint button shown in practice", !$("hint-row").hidden);
   check("hint offers 2 steps on a mixed set", /2 left/.test($("hint-btn").textContent), $("hint-btn").textContent);
   const hq = currentSource();
@@ -466,6 +467,92 @@ setTimeout(() => {
       d.querySelectorAll(".q-answer.eliminated").length === 1 && !/Topic:/.test($("hint-text").textContent));
     d.querySelector('.quit-btn[data-nav="home"]').click();
   }
+
+  /* ---- Performance-based questions: bank integrity, then a full run through
+     the real UI -- solve every PBQ, deliberately botch one, and check partial
+     credit reaches the results screen and the exported log. */
+  console.log("\n== Performance-based questions ==");
+  const PBQ = w.PBQ_BANK || [];
+  check("PBQ bank loaded", PBQ.length >= 15, PBQ.length);
+  check("PBQ ids unique", new Set(PBQ.map(p => p.id)).size === PBQ.length);
+  check("every PBQ objective exists", PBQ.every(p => !!(w.OBJECTIVE_META || {})[p.objective]),
+    PBQ.filter(p => !(w.OBJECTIVE_META || {})[p.objective]).map(p => p.id).join(","));
+  check("every PBQ has a known type and an explanation",
+    PBQ.every(p => ["order", "categorize", "table"].includes(p.type) && p.explanation && p.explanation.length > 40));
+  check("categorize items all name a listed category",
+    PBQ.filter(p => p.type === "categorize").every(p => p.items.every(it => p.categories.includes(it.category))));
+  check("categorize: every category is used",
+    PBQ.filter(p => p.type === "categorize").every(p => p.categories.every(c => p.items.some(it => it.category === c))));
+  check("table answers are among their options",
+    PBQ.filter(p => p.type === "table").every(p => p.rows.every(r => r.every(c =>
+      !c || typeof c !== "object" || c.options.includes(c.answer)))));
+  check("table rows match column count",
+    PBQ.filter(p => p.type === "table").every(p => p.rows.every(r => r.length === p.columns.length)));
+
+  d.querySelector('[data-nav="home"]')?.click();
+  check("PBQ card enabled", !$("pbq-btn").disabled);
+  check("PBQ card names the count", $("pbq-sub").textContent.startsWith(PBQ.length + " simulations"), $("pbq-sub").textContent);
+  $("pbq-btn").click();
+  const pbqOpts = d.querySelectorAll(".setup-opt");
+  pbqOpts[pbqOpts.length - 1].click();                  // All
+  check("PBQ session started", vis("view-quiz") && $("q-counter").textContent === "Question 1 / " + PBQ.length,
+    $("q-counter").textContent);
+  check("A-D answer buttons hidden on a PBQ", d.querySelectorAll(".q-answer").length === 0);
+  check("simulation locked before confidence", !!d.querySelector(".pbq-locked") && $("pbq-submit").disabled);
+
+  const chipByText = (t, scope) => [...(scope || d).querySelectorAll(".pbq-pool .pbq-chip")].find(b => b.textContent === t);
+  const groupByName = n => [...d.querySelectorAll(".pbq-group-head")].find(b => b.textContent === n);
+  let botched = null;
+  for (let i = 0; i < PBQ.length; i++) {
+    const src = PBQ.find(p => p.question === $("q-text").textContent);
+    d.querySelector('.confidence-btn[data-confidence="sure"]').click();
+    const botch = i === 0;
+    if (src.type === "order") {
+      // Botch = swap the first two steps, so the score is partial, never zero.
+      const seq = botch ? [src.items[1], src.items[0], ...src.items.slice(2)] : src.items;
+      seq.forEach(t => chipByText(t).click());
+    } else if (src.type === "categorize") {
+      src.items.forEach((it, k) => {
+        chipByText(it.text).click();
+        const wrongCat = src.categories.find(c => c !== it.category);
+        groupByName(botch && k === 0 ? wrongCat : it.category).click();
+      });
+    } else {
+      let k = 0;
+      src.rows.forEach((row, r) => row.forEach((cell, c) => {
+        if (!cell || typeof cell !== "object") return;
+        const sel = [...d.querySelectorAll(".pbq-select")][k++];
+        sel.value = botch && k === 1 ? cell.options.find(o => o !== cell.answer) : cell.answer;
+        sel.dispatchEvent(new w.Event("change"));
+      }));
+    }
+    if (botch) botched = src;
+    check(`${src.id} submit enabled once complete`, !$("pbq-submit").disabled);
+    $("pbq-submit").click();
+    const banner = $("feedback-banner").textContent;
+    if (botch) check(`${src.id} botched answer earns partial credit`, /^Partial credit/.test(banner), banner);
+    else check(`${src.id} solved correctly`, /^Correct/.test(banner), banner);
+    if (i < PBQ.length - 1) press("ArrowRight");
+  }
+  const marks = d.querySelectorAll(".pbq-right, .pbq-wrong");
+  check("answered PBQ shows right/wrong marks", marks.length > 0);
+  $("finish-btn").click();
+  check("PBQ results shown", vis("view-results"));
+  const pbqScore = $("results-score").textContent;
+  check("results score includes partial credit (not a whole number)",
+    new RegExp("^" + (PBQ.length - 1) + "\\.\\d / " + PBQ.length).test(pbqScore), pbqScore);
+  check("botched PBQ in review with PARTIAL tag",
+    [...d.querySelectorAll(".review-item")].some(el => /PARTIAL/.test(el.textContent) && /PBQ/.test(el.textContent)));
+  const pLogs = JSON.parse(w.localStorage.getItem("secplus_results_v1") || "[]");
+  const pLast = pLogs[pLogs.length - 1];
+  const pRow = pLast.questions.find(x => x.questionId === botched.id);
+  check("log marks PBQ rows as type pbq with a 0-1 score",
+    pLast.questions.every(x => x.type === "pbq") && pRow.score > 0 && pRow.score < 1 && pRow.correct === false,
+    JSON.stringify(pRow && { t: pRow.type, s: pRow.score }));
+  check("log carries PBQ objectives", pLast.questions.every(x => /^\d\.\d$/.test(x.objective)));
+  check("botched PBQ is now on the weak list",
+    !!(JSON.parse(w.localStorage.getItem("secplus_progress_v1") || "{}")[botched.id] || {}).lastResult);
+  d.querySelector('[data-nav="home"]').click();
 
   /* ---- Mock exam: 90 questions in 90 minutes, weighted like the real exam.
      The draw must respect the published weights, the clock must run, and

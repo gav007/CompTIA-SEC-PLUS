@@ -13,6 +13,18 @@ chapter EPUB's question count against the generated file rather than trusting
 either number here. Nothing else was affected; ids are unique and every
 remaining question passes the integrity checks.
 
+**Added 2026-09-17: performance-based questions.** `questions/pbq.js` holds 18
+ORIGINAL PBQs (not from the book or CompTIA) in three interaction types --
+`order`, `categorize`, `table` -- which between them cover sequencing, matching,
+network-zone placement, firewall rules, wireless/server settings and log
+analysis. The home screen's PBQ card runs them. Interactions are tap-to-select
+then tap-to-place (HTML drag-and-drop fails on phones). Scoring is partial
+credit: a PBQ answer logs `type: "pbq"` and a 0-1 `score`, results show points
+(e.g. 17.8 / 18), and `PracticeResults/build_dashboard.py` counts the score.
+PBQs are not in the mock exam yet (the mock's 90-question weighting and its
+tests are unchanged). Hints on a PBQ offer the topic only. To add one, append
+to `PBQ_BANK`; the smoke test validates every category, option and objective.
+
 **Correction, 2026-09-17: seven questions shipped without their exhibit.** Found
 when "Donna is reviewing a script... What does the following script do?" showed
 no script. Two causes:

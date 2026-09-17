@@ -85,13 +85,14 @@
      organised by, which is a finer grain than the five domains. "Domain 2 at
      40%" says study domain 2; "2.3 at 0/3 while 2.1 is 6/6" says what to read
      tonight. */
+  // PBQs carry their objective inline rather than in objectives.js.
   function objectiveOf(q) {
     const tag = OBJ_TAGS[q.id];
-    return tag ? tag.o : "";
+    return tag ? tag.o : (q.objective || "");
   }
   function objectiveConfidence(q) {
     const tag = OBJ_TAGS[q.id];
-    return tag ? tag.c : "";
+    return tag ? tag.c : (q.objective ? "manual" : "");
   }
   function objectiveName(oid) {
     return (OBJ_META[oid] && OBJ_META[oid].name) || "";
@@ -190,13 +191,76 @@
   function getBank(bankId) {
     return (window.QUESTION_BANKS && window.QUESTION_BANKS[bankId]) || [];
   }
-  // Every loaded question paired with the domain it came from.
+  // Every loaded question paired with the domain it came from, PBQs included
+  // so a PBQ you got wrong lands on the weak list like any other question.
   function allItems() {
     const out = [];
     window.DOMAINS.forEach(d => {
       getBank(d.bank).forEach(q => out.push({ q, domain: d }));
     });
+    return out.concat(pbqItems());
+  }
+
+  /* ---------------- performance-based questions ----------------
+     Original simulations in questions/pbq.js. Three interaction types --
+     order, categorize, table -- cover the exam's PBQ styles (sequencing,
+     matching/placement, firewall/settings/log analysis). Every interaction is
+     tap-to-select then tap-to-place, because HTML drag-and-drop does not work
+     on phones. Scored with partial credit, like the real exam. */
+  function pbqItems() {
+    return (window.PBQ_BANK || []).map(q => {
+      const dnum = String(q.objective).split(".")[0] + ".0";
+      return { q: Object.assign({ pbq: true }, q), domain: window.DOMAINS.find(d => d.num === dnum) };
+    });
+  }
+  const isPbq = q => !!(q && q.pbq);
+
+  // Blank cells in a table PBQ, as [row, col, cell] triples.
+  function pbqBlanks(q) {
+    const out = [];
+    q.rows.forEach((row, r) => row.forEach((cell, c) => {
+      if (cell && typeof cell === "object") out.push([r, c, cell]);
+    }));
     return out;
+  }
+  function newPbqState(q) {
+    const idx = q.items ? shuffle(q.items.map((_, i) => i)) : [];
+    if (q.type === "order") return { pool: idx, placed: [] };
+    if (q.type === "categorize") return { pool: idx, placement: {}, selected: null };
+    return { values: {} };
+  }
+  function pbqComplete(q, st) {
+    if (q.type === "order") return st.placed.length === q.items.length;
+    if (q.type === "categorize") return Object.keys(st.placement).length === q.items.length;
+    return pbqBlanks(q).every(([r, c]) => st.values[r + "-" + c]);
+  }
+  // Fraction right, rounded to 2dp. Order: positions right. Categorize:
+  // items in the right group. Table: blanks filled correctly.
+  function scorePbq(q, st) {
+    let right = 0, total = 0;
+    if (q.type === "order") {
+      total = q.items.length;
+      st.placed.forEach((itemIdx, pos) => { if (itemIdx === pos) right++; });
+    } else if (q.type === "categorize") {
+      total = q.items.length;
+      q.items.forEach((it, i) => { if (st.placement[i] === it.category) right++; });
+    } else {
+      const blanks = pbqBlanks(q);
+      total = blanks.length;
+      blanks.forEach(([r, c, cell]) => { if (st.values[r + "-" + c] === cell.answer) right++; });
+    }
+    return { right, total, score: total ? Math.round((right / total) * 100) / 100 : 0 };
+  }
+  // One-line text versions for the review list and the exported log.
+  function pbqResponseText(q, st) {
+    if (q.type === "order") return st.placed.map((i, p) => (p + 1) + ". " + q.items[i]).join(" | ");
+    if (q.type === "categorize") return q.items.map((it, i) => it.text + " → " + (st.placement[i] || "—")).join(" | ");
+    return pbqBlanks(q).map(([r, c]) => q.columns[c] + " (" + q.rows[r][0] + "): " + (st.values[r + "-" + c] || "—")).join(" | ");
+  }
+  function pbqAnswerText(q) {
+    if (q.type === "order") return q.items.map((t, p) => (p + 1) + ". " + t).join(" | ");
+    if (q.type === "categorize") return q.items.map(it => it.text + " → " + it.category).join(" | ");
+    return pbqBlanks(q).map(([r, c, cell]) => q.columns[c] + " (" + q.rows[r][0] + "): " + cell.answer).join(" | ");
   }
   function weakItems() {
     const store = loadProgress();
@@ -345,6 +409,12 @@
       weak.length + " question" + (weak.length === 1 ? "" : "s") + " flagged";
     document.getElementById("weak-btn").disabled = weak.length === 0;
 
+    const pbqCount = pbqItems().length;
+    document.getElementById("pbq-btn").disabled = pbqCount === 0;
+    document.getElementById("pbq-sub").textContent = pbqCount
+      ? pbqCount + " simulations · order, match, configure · partial credit"
+      : "No PBQs loaded";
+
     const mockReady = mockAvailable();
     document.getElementById("mock-btn").disabled = !mockReady;
     document.getElementById("mock-sub").textContent = mockReady
@@ -370,6 +440,12 @@
     const mock = mockPool();
     startSession(mock.items, MOCK_QUESTIONS, "Mock Exam · all five domains",
       { mode: "mock", timeLimitMs: MOCK_MINUTES * 60000 });
+  });
+
+  document.getElementById("pbq-btn").addEventListener("click", () => {
+    const pool = pbqItems();
+    if (pool.length === 0) return;
+    renderSetup(null, pool, "Performance-Based Questions");
   });
 
   document.getElementById("export-results-btn").addEventListener("click", () => {
@@ -472,7 +548,7 @@
       optsWrap.appendChild(b);
     }
     // Offer only the presets the pool can actually fill, then "All" for the rest.
-    [10, 15, 20, 25, 50, 100].forEach(n => {
+    [5, 10, 15, 20, 25, 50, 100].forEach(n => {
       if (n < pool.length) addOption(String(n), n);
     });
     addOption("All (" + pool.length + ")", pool.length);
@@ -500,7 +576,7 @@
     // A mock arrives pre-sampled by domain weight; re-shuffling is fine but
     // slicing is not, so the caller passes exactly the set it wants.
     const picked = shuffle(pool).slice(0, count)
-      .map(item => Object.assign({}, item, { q: shuffleAnswers(item.q) }));
+      .map(item => Object.assign({}, item, { q: isPbq(item.q) ? item.q : shuffleAnswers(item.q) }));
     const startedAtMs = Date.now();
     state.session = {
       mode: options.mode || "practice",
@@ -516,6 +592,7 @@
       // any) step 2 struck out. Mocks get no hints -- the real exam has none.
       hintsUsed: new Array(picked.length).fill(0),
       eliminated: new Array(picked.length).fill(-1),
+      pbqState: picked.map(it => isPbq(it.q) ? newPbqState(it.q) : null),
       hintsAllowed: (options.mode || "practice") !== "mock",
       // Drilling one objective makes "the topic is 1.4" useless, so the topic
       // step is skipped and the first hint goes straight to eliminating.
@@ -582,7 +659,12 @@
 
     renderHint(index);
 
-    q.answers.forEach((text, i) => {
+    const pbqWrap = document.getElementById("q-pbq");
+    pbqWrap.hidden = !isPbq(q);
+    pbqWrap.innerHTML = "";
+    if (isPbq(q)) renderPbq(index, pbqWrap);
+
+    (isPbq(q) ? [] : q.answers).forEach((text, i) => {
       const btn = document.createElement("button");
       btn.className = "q-answer";
       btn.innerHTML = '<span class="q-answer-letter">' + LETTERS[i] + '</span>' +
@@ -607,7 +689,10 @@
     if (existing) {
       feedback.classList.remove("hidden");
       const banner = document.getElementById("feedback-banner");
-      banner.textContent = existing.correct ? "Correct" : "Incorrect";
+      banner.textContent = existing.pbq
+        ? (existing.correct ? "Correct" : "Partial credit") + " · " + existing.right + " / " + existing.total +
+          " (" + Math.round(existing.score * 100) + "%)"
+        : (existing.correct ? "Correct" : "Incorrect");
       banner.className = "feedback-banner " + (existing.correct ? "correct" : "incorrect");
       document.getElementById("feedback-explain").textContent = q.explanation || "";
       const isLast = index === total - 1;
@@ -622,11 +707,179 @@
     document.getElementById("prev-btn").disabled = index === 0;
   }
 
+  /* ---------------- PBQ rendering ----------------
+     Built with DOM nodes and textContent throughout -- the item text contains
+     things like <script> payloads that must display, never execute. */
+  function renderPbq(index, wrap) {
+    const s = state.session;
+    const q = s.questions[index].q;
+    const st = s.pbqState[index];
+    const done = s.answers[index];
+    const locked = !!done || !s.confidences[index];
+    const el = (tag, cls, text) => {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text !== undefined) n.textContent = text;
+      return n;
+    };
+    const rerender = () => renderQuestion(index);
+    const mark = (node, ok) => {
+      node.classList.add(ok ? "pbq-right" : "pbq-wrong");
+      node.prepend(el("span", "pbq-mark", ok ? "✓ " : "✗ "));
+    };
+
+    wrap.appendChild(el("p", "pbq-instructions",
+      q.type === "order" ? "Tap the steps in order. Tap a placed step to send it back."
+        : q.type === "categorize" ? "Tap an item, then tap the group it belongs in. Tap a placed item to send it back."
+          : "Choose a value for every blank cell."));
+    if (!s.confidences[index] && !done) {
+      wrap.appendChild(el("p", "pbq-locked", "Pick your confidence above to unlock the simulation."));
+    }
+
+    if (q.type === "order") {
+      const list = el("ol", "pbq-slots");
+      st.placed.forEach((itemIdx, pos) => {
+        const li = el("li");
+        const b = el("button", "pbq-chip placed", q.items[itemIdx]);
+        b.type = "button";
+        b.disabled = locked;
+        b.onclick = () => { st.placed.splice(pos, 1); st.pool.push(itemIdx); rerender(); };
+        if (done) mark(b, itemIdx === pos);
+        li.appendChild(b);
+        list.appendChild(li);
+      });
+      for (let i = st.placed.length; i < q.items.length; i++) list.appendChild(el("li", "pbq-empty", "—"));
+      wrap.appendChild(list);
+      if (st.pool.length) {
+        const pool = el("div", "pbq-pool");
+        st.pool.forEach(itemIdx => {
+          const b = el("button", "pbq-chip", q.items[itemIdx]);
+          b.type = "button";
+          b.disabled = locked;
+          b.onclick = () => { st.pool = st.pool.filter(x => x !== itemIdx); st.placed.push(itemIdx); rerender(); };
+          pool.appendChild(b);
+        });
+        wrap.appendChild(pool);
+      }
+      if (done && st.placed.some((itemIdx, pos) => itemIdx !== pos)) {
+        wrap.appendChild(el("p", "pbq-should", "Correct order: " + q.items.map((t, i) => (i + 1) + ". " + t).join("  ·  ")));
+      }
+    } else if (q.type === "categorize") {
+      const unplaced = st.pool.filter(i => !(i in st.placement));
+      if (unplaced.length) {
+        const pool = el("div", "pbq-pool");
+        unplaced.forEach(i => {
+          const b = el("button", "pbq-chip" + (st.selected === i ? " selected" : ""), q.items[i].text);
+          b.type = "button";
+          b.disabled = locked;
+          b.setAttribute("aria-pressed", st.selected === i ? "true" : "false");
+          b.onclick = () => { st.selected = st.selected === i ? null : i; rerender(); };
+          pool.appendChild(b);
+        });
+        wrap.appendChild(pool);
+      }
+      const groups = el("div", "pbq-groups");
+      q.categories.forEach(cat => {
+        const box = el("div", "pbq-group");
+        const head = el("button", "pbq-group-head", cat);
+        head.type = "button";
+        head.disabled = locked || st.selected === null;
+        head.onclick = () => { st.placement[st.selected] = cat; st.selected = null; rerender(); };
+        box.appendChild(head);
+        st.pool.filter(i => st.placement[i] === cat).forEach(i => {
+          const b = el("button", "pbq-chip placed", q.items[i].text);
+          b.type = "button";
+          b.disabled = locked;
+          b.onclick = () => { delete st.placement[i]; rerender(); };
+          if (done) {
+            mark(b, q.items[i].category === cat);
+            if (q.items[i].category !== cat) b.appendChild(el("span", "pbq-should", " → " + q.items[i].category));
+          }
+          box.appendChild(b);
+        });
+        groups.appendChild(box);
+      });
+      wrap.appendChild(groups);
+    } else {
+      const scroll = el("div", "pbq-table-wrap");
+      const table = el("table", "pbq-table");
+      const head = el("tr");
+      q.columns.forEach(c => head.appendChild(el("th", "", c)));
+      table.appendChild(head);
+      q.rows.forEach((row, r) => {
+        const tr = el("tr");
+        row.forEach((cell, c) => {
+          const td = el("td");
+          if (cell && typeof cell === "object") {
+            const key = r + "-" + c;
+            const sel = el("select", "pbq-select");
+            sel.setAttribute("aria-label", q.columns[c] + " for " + row[0]);
+            sel.disabled = locked;
+            const blank = el("option", "", "Choose…");
+            blank.value = "";
+            sel.appendChild(blank);
+            cell.options.forEach(o => { const opt = el("option", "", o); opt.value = o; sel.appendChild(opt); });
+            sel.value = st.values[key] || "";
+            sel.onchange = () => { st.values[key] = sel.value; rerender(); };
+            td.appendChild(sel);
+            if (done) {
+              const ok = st.values[key] === cell.answer;
+              mark(td, ok);
+              if (!ok) td.appendChild(el("div", "pbq-should", "Correct: " + cell.answer));
+            }
+          } else {
+            td.textContent = cell;
+          }
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+      });
+      scroll.appendChild(table);
+      wrap.appendChild(scroll);
+    }
+
+    if (!done) {
+      const submit = el("button", "pbq-submit", "Submit answer");
+      submit.type = "button";
+      submit.id = "pbq-submit";
+      submit.disabled = locked || !pbqComplete(q, st);
+      submit.onclick = () => submitPbq(index);
+      wrap.appendChild(submit);
+    }
+  }
+
+  function submitPbq(index) {
+    const s = state.session;
+    if (s.answers[index] || !s.confidences[index]) return;
+    const q = s.questions[index].q;
+    const st = s.pbqState[index];
+    if (!pbqComplete(q, st)) return;
+    const result = scorePbq(q, st);
+    const hintsUsed = s.hintsUsed[index];
+    s.answers[index] = {
+      pbq: true,
+      score: result.score,
+      right: result.right,
+      total: result.total,
+      correct: result.score === 1,
+      response: pbqResponseText(q, st),
+      confidence: s.confidences[index],
+      hintsUsed,
+      hinted: hintsUsed > 0,
+      timeTakenMs: Math.max(0, Date.now() - s.firstShownAt[index]),
+      answeredAt: new Date().toISOString()
+    };
+    recordAnswer(q.id, result.score === 1, s.confidences[index], hintsUsed > 0);
+    renderQuestion(index);
+  }
+
   /* ---------------- hints ----------------
      Two steps, cheapest first: name the topic, then strike out one wrong
      option. Using either marks the answer as hinted everywhere it is counted
      -- the progress store, the results screen and the exported log. */
-  function hintSteps(s) {
+  function hintSteps(s, q) {
+    // A PBQ has no options to strike out, so it only offers the topic.
+    if (isPbq(q)) return s.singleObjective ? [] : ["topic"];
     return s.singleObjective ? ["eliminate"] : ["topic", "eliminate"];
   }
   function renderHint(index) {
@@ -634,11 +887,11 @@
     const row = document.getElementById("hint-row");
     const btn = document.getElementById("hint-btn");
     const text = document.getElementById("hint-text");
-    row.hidden = !s.hintsAllowed;
-    if (!s.hintsAllowed) return;
-
     const q = s.questions[index].q;
-    const steps = hintSteps(s);
+    const steps = hintSteps(s, q);
+    row.hidden = !s.hintsAllowed || steps.length === 0;
+    if (row.hidden) return;
+
     const used = s.hintsUsed[index];
     const lines = [];
     steps.slice(0, used).forEach(step => {
@@ -666,7 +919,7 @@
   function useHint(index) {
     const s = state.session;
     if (!s.hintsAllowed || s.answers[index]) return;
-    const steps = hintSteps(s);
+    const steps = hintSteps(s, s.questions[index].q);
     const used = s.hintsUsed[index];
     if (used >= steps.length) return;
     if (steps[used] === "eliminate") {
@@ -736,6 +989,7 @@
       if (conf) { s.confidences[i] = conf; renderQuestion(i); }
       return;
     }
+    if (isPbq(s.questions[i].q)) return;
     const letter = LETTERS.indexOf(e.key.toUpperCase());
     if (letter >= 0 && letter < s.questions[i].q.answers.length) selectAnswer(i, letter);
   });
@@ -778,6 +1032,7 @@
       // accuracyPercent stays the raw score so older exports compare cleanly.
       hintedCount: summary.hintedN,
       correctWithoutHintsCount: summary.correctUnhintedN,
+      pointsCount: summary.pointsN,
       accuracyWithoutHintsPercent: summary.percentUnhinted,
       accuracyPercent: summary.percent,
       questions: s.questions.map((item, i) => {
@@ -792,8 +1047,11 @@
           // log so a future analysis can discount those rows.
           objectiveConfidence: objectiveConfidence(q),
           question: q.question,
-          selectedAnswer: a ? q.answers[a.selectedIndex] : null,
-          correctAnswer: q.answers[q.correct],
+          selectedAnswer: a ? (a.pbq ? a.response : q.answers[a.selectedIndex]) : null,
+          correctAnswer: q.pbq ? pbqAnswerText(q) : q.answers[q.correct],
+          // PBQs: type "pbq" and a 0-1 partial-credit score; correct = full marks.
+          type: q.pbq ? "pbq" : "mcq",
+          score: q.pbq ? (a ? a.score : 0) : (a && a.correct ? 1 : 0),
           correct: !!(a && a.correct),
           confidence: a ? a.confidence : null,
           // 0 = no hint, 1 = one step, 2 = topic + eliminated option.
@@ -812,6 +1070,9 @@
     stopTimer();
     let correctN = 0, wrongN = 0, unsureN = 0, guessedN = 0, unansweredN = 0;
     let hintedN = 0, correctUnhintedN = 0;
+    // Points = 1 per right multiple-choice answer, the fraction earned on a PBQ.
+    let pointsN = 0, pointsUnhintedN = 0;
+    const pointsOf = a => !a ? 0 : (a.pbq ? a.score : (a.correct ? 1 : 0));
     const reviewItems = [];
     // Per-domain tallies are what turn a mock score into a study instruction:
     // "62% overall" is not actionable, "domain 4 at 48%" is.
@@ -831,11 +1092,13 @@
     s.questions.forEach((item, i) => {
       const a = s.answers[i];
       const num = item.domain ? item.domain.num : (item.q.domain || "?");
-      if (a && a.correct) byDomain[num].correct++;
+      byDomain[num].correct += pointsOf(a);
       if (!a || !a.correct || a.confidence !== "sure" || a.hinted) byDomain[num].shaky++;
       if (!a) { wrongN++; unansweredN++; return; }
       if (a.correct) correctN++; else wrongN++;
       if (a.correct && !a.hinted) correctUnhintedN++;
+      pointsN += pointsOf(a);
+      if (!a.hinted) pointsUnhintedN += pointsOf(a);
       if (a.confidence === "unsure") unsureN++;
       if (a.confidence === "guessed") guessedN++;
       if (a.hinted) hintedN++;
@@ -852,20 +1115,23 @@
       if (!byObjective[oid]) byObjective[oid] = { objective: oid, name: objectiveName(oid), asked: 0, correct: 0 };
       byObjective[oid].asked++;
       const a = s.answers[i];
-      if (a && a.correct) byObjective[oid].correct++;
+      byObjective[oid].correct += pointsOf(a);
     });
     const objectiveRows = Object.keys(byObjective).sort().map(k => {
       const r = byObjective[k];
       return Object.assign({}, r, {
+        correct: Math.round(r.correct * 100) / 100,
         accuracyPercent: r.asked ? Math.round((r.correct / r.asked) * 1000) / 10 : 0
       });
     });
 
     const total = s.questions.length;
-    const percent = total ? Math.round((correctN / total) * 1000) / 10 : 0;
-    const percentUnhinted = total ? Math.round((correctUnhintedN / total) * 1000) / 10 : 0;
+    const percent = total ? Math.round((pointsN / total) * 1000) / 10 : 0;
+    const fmtPoints = n => String(Math.round(n * 10) / 10);
+    const percentUnhinted = total ? Math.round((pointsUnhintedN / total) * 1000) / 10 : 0;
     const summary = { correctN, wrongN, unsureN, guessedN, percent, unansweredN,
                       hintedN, correctUnhintedN, percentUnhinted,
+                      pointsN: Math.round(pointsN * 100) / 100,
                       byObjective: objectiveRows };
     saveCompletedSession(s, summary, byDomain);
 
@@ -884,7 +1150,7 @@
       : "Below " + PASS_MARK + "% target";
     verdict.className = "results-verdict " + (passed ? "pass" : "fail");
     document.getElementById("results-score").textContent =
-      correctN + " / " + total + " · " + percent + "%";
+      fmtPoints(pointsN) + " / " + total + " · " + percent + "%";
 
     document.getElementById("results-stats").innerHTML =
       '<div class="stat-pill correct"><b>' + correctN + '</b>Correct</div>' +
@@ -895,7 +1161,7 @@
     // With hints in play, the honest number is the one without them.
     if (hintedN) {
       document.getElementById("results-source").textContent +=
-        " · without hints: " + correctUnhintedN + " / " + total + " · " + percentUnhinted + "%";
+        " · without hints: " + fmtPoints(pointsUnhintedN) + " / " + total + " · " + percentUnhinted + "%";
     }
 
     // Domain breakdown: shown whenever a session spans more than one domain,
@@ -967,7 +1233,8 @@
       const div = document.createElement("div");
       div.className = "review-item";
       const tags =
-        (!answer.correct ? '<span class="review-tag wrong">WRONG</span>' : "") +
+        (!answer.correct ? '<span class="review-tag wrong">' + (answer.pbq ? "PARTIAL " + Math.round(answer.score * 100) + "%" : "WRONG") + '</span>' : "") +
+        (q.pbq ? '<span class="review-tag pbq">PBQ</span>' : "") +
         (answer.confidence === "guessed" ? '<span class="review-tag guessed">GUESSED</span>' : "") +
         (answer.confidence === "unsure" ? '<span class="review-tag unsure">UNSURE</span>' : "") +
         (answer.hinted ? '<span class="review-tag hinted">HINTED</span>' : "");
@@ -978,10 +1245,15 @@
           ? '<figure class="q-figure"><img src="' + escapeHtml(q.image) +
             '" alt="' + escapeHtml(q.imageAlt || "Figure for this question") + '"></figure>'
           : "") +
-        (!answer.correct
-          ? '<p class="review-your">Your answer: ' + escapeHtml(q.answers[answer.selectedIndex]) + '</p>'
-          : "") +
-        '<p class="review-correct">Correct answer: ' + escapeHtml(q.answers[q.correct]) + '</p>' +
+        (answer.pbq
+          ? (!answer.correct
+              ? '<p class="review-your">Your answer (' + Math.round(answer.score * 100) + '%): ' + escapeHtml(answer.response) + '</p>'
+              : "") +
+            '<p class="review-correct">Correct answer: ' + escapeHtml(pbqAnswerText(q)) + '</p>'
+          : (!answer.correct
+              ? '<p class="review-your">Your answer: ' + escapeHtml(q.answers[answer.selectedIndex]) + '</p>'
+              : "") +
+            '<p class="review-correct">Correct answer: ' + escapeHtml(q.answers[q.correct]) + '</p>') +
         '<p class="review-explain">' + escapeHtml(q.explanation || "") + '</p>';
       review.appendChild(div);
     });
