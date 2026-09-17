@@ -1039,7 +1039,7 @@ window.QUESTION_BANKS["domain2"] = [
   {
     "id": "SEC-D2-081",
     "domain": "2.0",
-    "question": "Jared's organization runs Linux servers, and recent vulnerability scans show that the servers are vulnerable to an issue that is described as follows:",
+    "question": "Jared's organization runs Linux servers, and recent vulnerability scans show that the servers are vulnerable to an issue that is described as follows: What is Jared's best option to remediate a kernel vulnerability like this?",
     "answers": [
       "Patch the application.",
       "Install a HIPS with appropriate rules.",
@@ -1047,7 +1047,8 @@ window.QUESTION_BANKS["domain2"] = [
       "Patch the operating system."
     ],
     "correct": 3,
-    "explanation": "The Linux kernel is part of the operating system and needs to be handled with an OS patch. There is no application to patch, installing a HIPS might help, but the issue is dated 2018, meaning that a patch likely exists. If there wasn't a patch and this was a new vulnerability, segmentation might be a useful immediate response to reduce risk."
+    "explanation": "The Linux kernel is part of the operating system and needs to be handled with an OS patch. There is no application to patch, installing a HIPS might help, but the issue is dated 2018, meaning that a patch likely exists. If there wasn't a patch and this was a new vulnerability, segmentation might be a useful immediate response to reduce risk.",
+    "exhibit": "CVE-2018-5703: tcp_v6_syn_recv_sock function in net/ipv6/tcp_ipv6.c in\nthe Linux kernel through 4.14.11 allows attackers to cause a denial of\nservice (slab out-of-bounds write)"
   },
   {
     "id": "SEC-D2-082",
@@ -1403,7 +1404,7 @@ window.QUESTION_BANKS["domain2"] = [
   {
     "id": "SEC-D2-109",
     "domain": "2.0",
-    "question": "While reviewing web logs for her organization's website, Kathleen discovers the entry shown here:",
+    "question": "While reviewing web logs for her organization's website, Kathleen discovers the entry shown here: What type of attack has she potentially discovered?",
     "answers": [
       "A directory traversal attack",
       "A web application buffer overflow",
@@ -1411,7 +1412,8 @@ window.QUESTION_BANKS["domain2"] = [
       "A slashdot attack"
     ],
     "correct": 0,
-    "explanation": "Directory traversal attacks attempt to exploit tools that can read directories and files by moving through the directory structure. The example would try to read the config.txt file three layers above the working directory of the web application itself. Adding common directory names or common filenames can allow attackers (or penetration testers) to read other files in accessible directories if they are not properly secured. The remainder of the options were made up for this question, although Slashdot is an actual website."
+    "explanation": "Directory traversal attacks attempt to exploit tools that can read directories and files by moving through the directory structure. The example would try to read the config.txt file three layers above the working directory of the web application itself. Adding common directory names or common filenames can allow attackers (or penetration testers) to read other files in accessible directories if they are not properly secured. The remainder of the options were made up for this question, although Slashdot is an actual website.",
+    "exhibit": "GET http://example.com/viewarticle.php?view=../../../config.txt HTTP/1.1"
   },
   {
     "id": "SEC-D2-110",
@@ -2126,7 +2128,8 @@ window.QUESTION_BANKS["domain2"] = [
       "A list of all users"
     ],
     "correct": 3,
-    "explanation": "If this query is successful, it will match all categories because it looks for categories that match customers or TRUE which is how OR 1=1 resolves. That means that any category will match, providing Jill with a list of all users, not just all customers or customers with specific userIDs."
+    "explanation": "If this query is successful, it will match all categories because it looks for categories that match customers or TRUE which is how OR 1=1 resolves. That means that any category will match, providing Jill with a list of all users, not just all customers or customers with specific userIDs.",
+    "exhibit": "SELECT * FROM users WHERE category = 'customers' OR 1=1--'"
   },
   {
     "id": "SEC-D2-166",
@@ -2287,7 +2290,7 @@ window.QUESTION_BANKS["domain2"] = [
   {
     "id": "SEC-D2-178",
     "domain": "2.0",
-    "question": "While reviewing logs, Chris sees an Apache web log that includes the following entry:",
+    "question": "While reviewing logs, Chris sees an Apache web log that includes the following entry: What type of attack has Chris most likely uncovered, and what file will it return?",
     "answers": [
       "A replay attack, password00.png",
       "A directory traversal attack, password00.png",
@@ -2295,7 +2298,8 @@ window.QUESTION_BANKS["domain2"] = [
       "A directory traversal attack, passwd"
     ],
     "correct": 3,
-    "explanation": "This is a directory traversal attack. The characteristic /../../ is the first indicator you should pay attention to. The %00 is a null byte, meaning that many applications will stop reading when they encounter it. You might not know that detail as you take the exam, but you should know that attackers would look for the passwd file, not a PNG of a password!"
+    "explanation": "This is a directory traversal attack. The characteristic /../../ is the first indicator you should pay attention to. The %00 is a null byte, meaning that many applications will stop reading when they encounter it. You might not know that detail as you take the exam, but you should know that attackers would look for the passwd file, not a PNG of a password!",
+    "exhibit": "https://www.example.com/viewer.php?filename=../../../etc/passwd%00.png"
   },
   {
     "id": "SEC-D2-179",
@@ -2339,7 +2343,7 @@ window.QUESTION_BANKS["domain2"] = [
   {
     "id": "SEC-D2-182",
     "domain": "2.0",
-    "question": "Dan was recently troubleshooting a web server and deployed a firewall rule to his organization's datacenter firewall at the beginning of the ruleset. The rule reads:",
+    "question": "Dan was recently troubleshooting a web server and deployed a firewall rule to his organization's datacenter firewall at the beginning of the ruleset. The rule reads: What type of vulnerability should the security team at Dan's workplace label this as?",
     "answers": [
       "A jailbreak",
       "A race condition",
@@ -2347,7 +2351,8 @@ window.QUESTION_BANKS["domain2"] = [
       "An injection attack"
     ],
     "correct": 2,
-    "explanation": "Allowing all TCP 80 traffic to any internal system is a common misconfiguration for firewalls when troubleshooting. Placing an overly broad rule in a firewall ruleset, particularly when it is processed early (at the top) of a ruleset is dangerous, even though it happens more than security practitioners want to think about! Jailbreaks are done on iOS-based mobile devices to bypass security; race conditions occur when the time-of-check (TOC) and time-of-use (TOU) of a variable, memory location, or other resource allows for changes when it shouldn't; and injection attacks are typically conducted against memory, code, or other resources, not firewall rules."
+    "explanation": "Allowing all TCP 80 traffic to any internal system is a common misconfiguration for firewalls when troubleshooting. Placing an overly broad rule in a firewall ruleset, particularly when it is processed early (at the top) of a ruleset is dangerous, even though it happens more than security practitioners want to think about! Jailbreaks are done on iOS-based mobile devices to bypass security; race conditions occur when the time-of-check (TOC) and time-of-use (TOU) of a variable, memory location, or other resource allows for changes when it shouldn't; and injection attacks are typically conducted against memory, code, or other resources, not firewall rules.",
+    "exhibit": "ALLOW FROM ANY:TCP 80 TO ANY:ANY"
   },
   {
     "id": "SEC-D2-183",

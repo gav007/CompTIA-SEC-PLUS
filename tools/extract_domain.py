@@ -170,6 +170,13 @@ def parse_questions(html):
                     img = node.find("img") if hasattr(node, "find") else None
                     if img and img.get("src"):
                         image, alt = img["src"], clean(img.get("alt", ""))
+                    # A sidebar can hold a <pre> instead of a figure (D1 Q45's
+                    # openssl command, D4 Q202's PowerShell script). Missing it
+                    # ships a "what does the following script do?" with no script.
+                    pre = node.find("pre") if hasattr(node, "find") else None
+                    if pre is not None:
+                        lines = [clean(t.get_text()) for t in pre.find_all("tt")]
+                        exhibit.extend(lines or [clean(pre.get_text())])
             if not stem:
                 continue
             item = {

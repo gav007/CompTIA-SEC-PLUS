@@ -585,7 +585,7 @@ window.QUESTION_BANKS["domain1"] = [
   {
     "id": "SEC-D1-045",
     "domain": "1.0",
-    "question": "Damian issues the following command on his Linux server:",
+    "question": "Damian issues the following command on his Linux server: What has he done?",
     "answers": [
       "Created a certificate signing request",
       "Created a certificate revocation request",
@@ -593,7 +593,8 @@ window.QUESTION_BANKS["domain1"] = [
       "Updated the OCSP record for a certificate"
     ],
     "correct": 0,
-    "explanation": "Damian has created a certificate signing request, which he can submit to a certificate authority (CA)."
+    "explanation": "Damian has created a certificate signing request, which he can submit to a certificate authority (CA).",
+    "exhibit": "openssl req -new -newkey rsa:2048 -nodes -keyout exampleserver.key -out exampleserver.csr"
   },
   {
     "id": "SEC-D1-046",

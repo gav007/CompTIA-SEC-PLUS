@@ -2649,7 +2649,8 @@ window.QUESTION_BANKS["domain4"] = [
       "Enables the Windows Defender service"
     ],
     "correct": 2,
-    "explanation": "This script will stop and disable the Windows Defender service on a system with IP address 10.1.1.101. You can identify both the Stop-Service and StartupType Disabled values in the script to determine what it is likely to do. It does not start Windows Defender, nor does it enable the service."
+    "explanation": "This script will stop and disable the Windows Defender service on a system with IP address 10.1.1.101. You can identify both the Stop-Service and StartupType Disabled values in the script to determine what it is likely to do. It does not start Windows Defender, nor does it enable the service.",
+    "exhibit": "$ip = \"10.1.1.101\"\n$svc_name = \"WinDefend\"\nget-service -ComputerName $ip | Where-Object {$_.Name -eq $svc_name} | Stop-Service | Set-Service -StartupType Disabled"
   },
   {
     "id": "SEC-D4-203",

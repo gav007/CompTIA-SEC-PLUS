@@ -13,6 +13,34 @@ chapter EPUB's question count against the generated file rather than trusting
 either number here. Nothing else was affected; ids are unique and every
 remaining question passes the integrity checks.
 
+**Correction, 2026-09-17: seven questions shipped without their exhibit.** Found
+when "Donna is reviewing a script... What does the following script do?" showed
+no script. Two causes:
+
+- The extractor only looked for an `<img>` inside `<div class="sidebar">`, but
+  some sidebars hold a `<pre>` instead: D1 Q45 (openssl command), D2 Q81 (CVE
+  text), D2 Q109 and Q178 (web log entries), D4 Q202 (PowerShell script).
+  `parse_questions()` now reads a `<pre>` inside any such wrapper.
+- D2 Q165 (SQL query) and Q182 (firewall rule) use a plain `<pre>` the current
+  extractor already handles, so `domain2.js` evidently predates the exhibit
+  handling added for chapter 3.
+
+Five of the seven had also lost the real question, printed as a second `<p>`
+*after* the exhibit, so the stem ended at "...the following entry:". Stems were
+restored to the book's full text.
+
+**The fix was patched into the banks by hand, byte-for-byte (CRLF kept), not by
+re-running the extractor.** A full re-run of domain 2 re-emits the missing Q54
+and Q159 and a figure (`domain2-q054.jpg`), and changes domain 3 as well, so
+regenerating is still not a no-op. Resolve that before trusting a re-run.
+
+Every question in all five banks was then compared against a fresh parse of the
+chapter EPUBs for a missing exhibit, image or truncated stem: none remain (D2
+Q127 lacks a one-line list the options already repeat, so it is answerable).
+The smoke test now fails if a stem cites "the following script/command/query/
+entry", "rule reads", "described as follows" or "entry shown here" without an
+exhibit or image; run against the old banks it names exactly these seven.
+
 Each bank was verified the same way: an independent re-parse of both EPUBs,
 comparing every question stem and answer key against the generated file. All
 five came back with zero mismatches.
