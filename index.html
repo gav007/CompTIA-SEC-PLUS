@@ -144,6 +144,13 @@
             <button type="button" class="confidence-btn" data-confidence="guessed">Guessing</button>
           </div>
         </div>
+        <!-- Hints: step 1 names the topic, step 2 removes one wrong option.
+             A hinted answer is logged as hinted and stays on the weak list,
+             so a hint can never make a gap look like knowledge. -->
+        <div class="hint-row" id="hint-row">
+          <button type="button" class="hint-btn" id="hint-btn">Hint</button>
+          <p class="hint-text" id="hint-text" hidden></p>
+        </div>
         <div class="q-answers" id="q-answers"></div>
 
         <div class="q-feedback hidden" id="q-feedback">
@@ -155,6 +162,7 @@
       <p class="kbd-hint">
         <kbd>1</kbd>&ndash;<kbd>3</kbd> confidence &middot;
         <kbd>A</kbd>&ndash;<kbd>D</kbd> answer &middot;
+        <kbd>H</kbd> hint &middot;
         <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate
       </p>
     </div>

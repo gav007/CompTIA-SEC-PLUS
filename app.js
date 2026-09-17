@@ -129,20 +129,23 @@
     return { asked, correct, shaky, percent: asked ? Math.round((correct / asked) * 100) : null };
   }
 
-  function recordAnswer(qid, correct, confidence) {
+  function recordAnswer(qid, correct, confidence, hinted) {
     const store = loadProgress();
     const entry = store[qid] || { correctCount: 0, wrongCount: 0, guessedCount: 0 };
     if (correct) entry.correctCount++; else entry.wrongCount++;
     if (confidence === "guessed") entry.guessedCount++;
+    if (hinted) entry.hintedCount = (entry.hintedCount || 0) + 1;
     entry.lastResult = correct ? "correct" : "incorrect";
     entry.lastConfidence = confidence;
+    entry.lastHinted = !!hinted;
     entry.lastSeen = Date.now();
     store[qid] = entry;
     saveProgress(store);
   }
-  // Weak = got it wrong last time, or got it right without being sure.
+  // Weak = got it wrong last time, got it right without being sure, or needed
+  // a hint. A hinted right answer is help, not knowledge.
   function isWeak(entry) {
-    return !!entry && (entry.lastResult === "incorrect" ||
+    return !!entry && (entry.lastResult === "incorrect" || !!entry.lastHinted ||
       (entry.lastConfidence && entry.lastConfidence !== "sure"));
   }
 
@@ -374,8 +377,10 @@
     if (logs.length === 0) return;
     downloadJson({
       // v2 adds objectiveScores[] per session and objective/objectiveConfidence
-      // per question. v1 exports stay readable: the new keys are additions.
-      schemaVersion: 2,
+      // per question. v3 adds hint use (hintedCount, accuracyWithoutHintsPercent
+      // per session; hintsUsed/hinted per question). Older exports stay
+      // readable: each version only adds keys.
+      schemaVersion: 3,
       certification: "CompTIA Security+ SY0-701",
       exportedAt: new Date().toISOString(),
       sessionCount: logs.length,
@@ -507,6 +512,14 @@
       questions: picked,
       answers: new Array(picked.length).fill(null),
       confidences: new Array(picked.length).fill(null),
+      // Hint state per question: how many steps used, and which option (if
+      // any) step 2 struck out. Mocks get no hints -- the real exam has none.
+      hintsUsed: new Array(picked.length).fill(0),
+      eliminated: new Array(picked.length).fill(-1),
+      hintsAllowed: (options.mode || "practice") !== "mock",
+      // Drilling one objective makes "the topic is 1.4" useless, so the topic
+      // step is skipped and the first hint goes straight to eliminating.
+      singleObjective: new Set(picked.map(it => objectiveOf(it.q))).size === 1,
       firstShownAt: new Array(picked.length).fill(null),
       index: 0,
       sourceLabel: label,
@@ -567,18 +580,21 @@
       };
     });
 
+    renderHint(index);
+
     q.answers.forEach((text, i) => {
       const btn = document.createElement("button");
       btn.className = "q-answer";
       btn.innerHTML = '<span class="q-answer-letter">' + LETTERS[i] + '</span>' +
         '<span>' + escapeHtml(text) + '</span>';
+      if (i === s.eliminated[index]) btn.classList.add("eliminated");
       if (existing) {
         btn.disabled = true;
         if (i === q.correct) btn.classList.add("correct");
         else if (i === existing.selectedIndex) btn.classList.add("incorrect");
       } else {
         // Locked until a confidence is picked -- that gate is the point.
-        btn.disabled = !confidence;
+        btn.disabled = !confidence || i === s.eliminated[index];
         btn.addEventListener("click", () => selectAnswer(index, i));
       }
       answersWrap.appendChild(btn);
@@ -606,20 +622,80 @@
     document.getElementById("prev-btn").disabled = index === 0;
   }
 
+  /* ---------------- hints ----------------
+     Two steps, cheapest first: name the topic, then strike out one wrong
+     option. Using either marks the answer as hinted everywhere it is counted
+     -- the progress store, the results screen and the exported log. */
+  function hintSteps(s) {
+    return s.singleObjective ? ["eliminate"] : ["topic", "eliminate"];
+  }
+  function renderHint(index) {
+    const s = state.session;
+    const row = document.getElementById("hint-row");
+    const btn = document.getElementById("hint-btn");
+    const text = document.getElementById("hint-text");
+    row.hidden = !s.hintsAllowed;
+    if (!s.hintsAllowed) return;
+
+    const q = s.questions[index].q;
+    const steps = hintSteps(s);
+    const used = s.hintsUsed[index];
+    const lines = [];
+    steps.slice(0, used).forEach(step => {
+      if (step === "topic") {
+        const oid = objectiveOf(q);
+        lines.push(oid
+          ? "Topic: " + oid + " " + objectiveName(oid)
+          : "Topic: domain " + (s.questions[index].domain ? s.questions[index].domain.num : q.domain));
+      } else if (s.eliminated[index] >= 0) {
+        lines.push("Removed one wrong answer: " + LETTERS[s.eliminated[index]] + ".");
+      }
+    });
+    text.textContent = lines.join("\n");
+    text.style.whiteSpace = "pre-line";
+    text.hidden = lines.length === 0;
+
+    const answered = !!s.answers[index];
+    const left = steps.length - used;
+    btn.disabled = answered || left === 0;
+    btn.textContent = answered || left === 0
+      ? (used ? "Hint used" : "No hint used")
+      : (used ? "Another hint" : "Hint") + " (" + left + " left)";
+    btn.onclick = () => useHint(index);
+  }
+  function useHint(index) {
+    const s = state.session;
+    if (!s.hintsAllowed || s.answers[index]) return;
+    const steps = hintSteps(s);
+    const used = s.hintsUsed[index];
+    if (used >= steps.length) return;
+    if (steps[used] === "eliminate") {
+      const q = s.questions[index].q;
+      const wrong = q.answers.map((_, i) => i).filter(i => i !== q.correct);
+      s.eliminated[index] = wrong[Math.floor(Math.random() * wrong.length)];
+    }
+    s.hintsUsed[index] = used + 1;
+    renderQuestion(index);
+  }
+
   function selectAnswer(index, selectedIndex) {
     const s = state.session;
     if (s.answers[index]) return;
+    if (selectedIndex === s.eliminated[index]) return;
     const q = s.questions[index].q;
     const correct = selectedIndex === q.correct;
     const confidence = s.confidences[index] || "unsure";
+    const hintsUsed = s.hintsUsed[index];
     s.answers[index] = {
       selectedIndex,
       correct,
       confidence,
+      hintsUsed,
+      hinted: hintsUsed > 0,
       timeTakenMs: Math.max(0, Date.now() - s.firstShownAt[index]),
       answeredAt: new Date().toISOString()
     };
-    recordAnswer(q.id, correct, confidence);
+    recordAnswer(q.id, correct, confidence, hintsUsed > 0);
     renderQuestion(index);
   }
 
@@ -652,6 +728,8 @@
       return;
     }
     if (answered) return;
+
+    if (e.key === "h" || e.key === "H") { useHint(i); return; }
 
     if (!s.confidences[i]) {
       const conf = { "1": "sure", "2": "unsure", "3": "guessed" }[e.key];
@@ -696,6 +774,11 @@
       wrongCount: summary.wrongN,
       unsureCount: summary.unsureN,
       guessedCount: summary.guessedN,
+      // Answers where a hint was used, and the score with those stripped out.
+      // accuracyPercent stays the raw score so older exports compare cleanly.
+      hintedCount: summary.hintedN,
+      correctWithoutHintsCount: summary.correctUnhintedN,
+      accuracyWithoutHintsPercent: summary.percentUnhinted,
       accuracyPercent: summary.percent,
       questions: s.questions.map((item, i) => {
         const q = item.q;
@@ -713,6 +796,9 @@
           correctAnswer: q.answers[q.correct],
           correct: !!(a && a.correct),
           confidence: a ? a.confidence : null,
+          // 0 = no hint, 1 = one step, 2 = topic + eliminated option.
+          hintsUsed: a ? (a.hintsUsed || 0) : 0,
+          hinted: !!(a && a.hinted),
           timeTakenMs: a ? a.timeTakenMs : null
         };
       })
@@ -725,6 +811,7 @@
     const s = state.session;
     stopTimer();
     let correctN = 0, wrongN = 0, unsureN = 0, guessedN = 0, unansweredN = 0;
+    let hintedN = 0, correctUnhintedN = 0;
     const reviewItems = [];
     // Per-domain tallies are what turn a mock score into a study instruction:
     // "62% overall" is not actionable, "domain 4 at 48%" is.
@@ -745,14 +832,16 @@
       const a = s.answers[i];
       const num = item.domain ? item.domain.num : (item.q.domain || "?");
       if (a && a.correct) byDomain[num].correct++;
-      if (!a || !a.correct || a.confidence !== "sure") byDomain[num].shaky++;
+      if (!a || !a.correct || a.confidence !== "sure" || a.hinted) byDomain[num].shaky++;
       if (!a) { wrongN++; unansweredN++; return; }
       if (a.correct) correctN++; else wrongN++;
+      if (a.correct && !a.hinted) correctUnhintedN++;
       if (a.confidence === "unsure") unsureN++;
       if (a.confidence === "guessed") guessedN++;
-      // Surface anything wrong OR not confidently answered -- a lucky guess is
-      // still a gap.
-      if (!a.correct || a.confidence !== "sure") reviewItems.push({ item, answer: a });
+      if (a.hinted) hintedN++;
+      // Surface anything wrong, not confidently answered, or hinted -- a lucky
+      // guess or an assisted answer is still a gap.
+      if (!a.correct || a.confidence !== "sure" || a.hinted) reviewItems.push({ item, answer: a });
     });
 
     // Per-objective tallies for this session, for the log and the breakdown.
@@ -774,7 +863,9 @@
 
     const total = s.questions.length;
     const percent = total ? Math.round((correctN / total) * 1000) / 10 : 0;
+    const percentUnhinted = total ? Math.round((correctUnhintedN / total) * 1000) / 10 : 0;
     const summary = { correctN, wrongN, unsureN, guessedN, percent, unansweredN,
+                      hintedN, correctUnhintedN, percentUnhinted,
                       byObjective: objectiveRows };
     saveCompletedSession(s, summary, byDomain);
 
@@ -799,7 +890,13 @@
       '<div class="stat-pill correct"><b>' + correctN + '</b>Correct</div>' +
       '<div class="stat-pill incorrect"><b>' + wrongN + '</b>Wrong</div>' +
       '<div class="stat-pill unsure"><b>' + unsureN + '</b>Unsure</div>' +
-      '<div class="stat-pill guessed"><b>' + guessedN + '</b>Guessed</div>';
+      '<div class="stat-pill guessed"><b>' + guessedN + '</b>Guessed</div>' +
+      (hintedN ? '<div class="stat-pill hinted"><b>' + hintedN + '</b>Hinted</div>' : "");
+    // With hints in play, the honest number is the one without them.
+    if (hintedN) {
+      document.getElementById("results-source").textContent +=
+        " · without hints: " + correctUnhintedN + " / " + total + " · " + percentUnhinted + "%";
+    }
 
     // Domain breakdown: shown whenever a session spans more than one domain,
     // so it covers mocks and mixed weak-question retries alike.
@@ -872,7 +969,8 @@
       const tags =
         (!answer.correct ? '<span class="review-tag wrong">WRONG</span>' : "") +
         (answer.confidence === "guessed" ? '<span class="review-tag guessed">GUESSED</span>' : "") +
-        (answer.confidence === "unsure" ? '<span class="review-tag unsure">UNSURE</span>' : "");
+        (answer.confidence === "unsure" ? '<span class="review-tag unsure">UNSURE</span>' : "") +
+        (answer.hinted ? '<span class="review-tag hinted">HINTED</span>' : "");
       div.innerHTML = tags +
         '<p class="review-q">' + escapeHtml(q.question) + '</p>' +
         (q.exhibit ? '<pre class="q-exhibit">' + escapeHtml(q.exhibit) + '</pre>' : "") +

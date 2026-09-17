@@ -74,6 +74,15 @@ setTimeout(() => {
   check("at least one domain has questions", loaded.length > 0);
 
   console.log("\n== Bank integrity ==");
+  // A stem pointing at a script, command, query, log entry or rule is
+  // unanswerable without it. Seven shipped that way once (the exhibit sat in
+  // a sidebar the extractor skipped); this keeps them from coming back.
+  const POINTS_AT_EXHIBIT = /following (script|command|query|entry)|rule reads|described as follows|entry shown here/i;
+  const bare = [];
+  loaded.forEach(dm => w.QUESTION_BANKS[dm.bank].forEach(q => {
+    if (POINTS_AT_EXHIBIT.test(q.question) && !q.exhibit && !q.image) bare.push(q.id);
+  }));
+  check("questions citing a script/command/log/rule carry an exhibit", bare.length === 0, bare.join(", "));
   loaded.forEach(dm => {
     const bank = w.QUESTION_BANKS[dm.bank];
     const ids = new Set(bank.map(q => q.id));
@@ -394,6 +403,70 @@ setTimeout(() => {
     [...seen].every(s => s.length > 0), [...seen][0] === "" ? "empty render" : "ok");
   check("question/answer order varies between sessions", seen.size > 1, seen.size + " distinct starts");
 
+  /* ---- Hints: topic first, then strike out a wrong option. A hinted answer
+     must be logged as hinted and stay on the weak list, even when correct. */
+  console.log("\n== Hints ==");
+  openWholeDomain(w.DOMAINS.indexOf(loaded[0]));
+  d.querySelectorAll(".setup-opt")[0].click();       // 10 mixed questions
+  check("hint button shown in practice", !$("hint-row").hidden);
+  check("hint offers 2 steps on a mixed set", /2 left/.test($("hint-btn").textContent), $("hint-btn").textContent);
+  const hq = currentSource();
+  $("hint-btn").click();
+  check("step 1 names the objective or domain", /^Topic: /.test($("hint-text").textContent), $("hint-text").textContent);
+  check("no option struck after step 1", d.querySelectorAll(".q-answer.eliminated").length === 0);
+  press("h");
+  const struck = d.querySelectorAll(".q-answer.eliminated");
+  check("step 2 strikes exactly one option", struck.length === 1, struck.length);
+  check("struck option is a wrong answer",
+    struck.length === 1 && struck[0].textContent.slice(1) !== hq.answers[hq.correct]);
+  check("struck option cannot be clicked", struck.length === 1 && struck[0].disabled);
+  check("hint button spent", $("hint-btn").disabled);
+  d.querySelector('.confidence-btn[data-confidence="sure"]').click();
+  check("struck option stays disabled after confidence",
+    d.querySelector(".q-answer.eliminated").disabled);
+  answerCorrectly();
+  check("hinted correct answer still marked Correct", $("feedback-banner").textContent === "Correct");
+  const hp = JSON.parse(w.localStorage.getItem("secplus_progress_v1") || "{}")[hq.id];
+  check("progress records the hint", hp && hp.lastHinted === true && hp.hintedCount >= 1, JSON.stringify(hp));
+  // Second question: answered without a hint, for contrast in the log.
+  press("ArrowRight");
+  const nq = currentSource();
+  d.querySelector('.confidence-btn[data-confidence="sure"]').click();
+  answerCorrectly();
+  for (let i = 0; i < 20 && !vis("finish-btn"); i++) {
+    press("ArrowRight");
+    d.querySelector('.confidence-btn[data-confidence="sure"]').click();
+    answerCorrectly();
+  }
+  $("finish-btn").click();
+  check("results show a Hinted pill", /1Hinted/.test($("results-stats").textContent), $("results-stats").textContent);
+  check("results show the score without hints", /without hints: 9 \/ 10/.test($("results-source").textContent),
+    $("results-source").textContent);
+  check("hinted correct answer is in the review list",
+    [...d.querySelectorAll(".review-item")].some(el => /HINTED/.test(el.textContent) && el.textContent.includes(hq.question)));
+  const hLogs = JSON.parse(w.localStorage.getItem("secplus_results_v1") || "[]");
+  const hLast = hLogs[hLogs.length - 1];
+  const hRow = hLast.questions.find(x => x.questionId === hq.id);
+  const nRow = hLast.questions.find(x => x.questionId === nq.id);
+  check("log: hinted question has hintsUsed 2", hRow && hRow.hintsUsed === 2 && hRow.hinted === true, JSON.stringify(hRow));
+  check("log: unhinted question has hintsUsed 0", nRow && nRow.hintsUsed === 0 && nRow.hinted === false);
+  check("log: session hint totals", hLast.hintedCount === 1 && hLast.correctWithoutHintsCount === 9 &&
+    hLast.accuracyWithoutHintsPercent === 90 && hLast.accuracyPercent === 100,
+    JSON.stringify({ h: hLast.hintedCount, c: hLast.correctWithoutHintsCount, p: hLast.accuracyWithoutHintsPercent }));
+  d.querySelector('[data-nav="home"]').click();
+
+  if (hasObjectives) {
+    // Drilling one objective: the topic step would say nothing new, so skip it.
+    [...d.querySelectorAll(".domain-card")].find(c => !c.disabled).click();
+    [...d.querySelectorAll(".objective-row")][1].click();
+    d.querySelectorAll(".setup-opt")[0].click();
+    check("single-objective set offers 1 hint step", /1 left/.test($("hint-btn").textContent), $("hint-btn").textContent);
+    $("hint-btn").click();
+    check("single-objective hint goes straight to striking an option",
+      d.querySelectorAll(".q-answer.eliminated").length === 1 && !/Topic:/.test($("hint-text").textContent));
+    d.querySelector('.quit-btn[data-nav="home"]').click();
+  }
+
   /* ---- Mock exam: 90 questions in 90 minutes, weighted like the real exam.
      The draw must respect the published weights, the clock must run, and
      hitting zero must end the session with unanswered questions as wrong. */
@@ -411,6 +484,7 @@ setTimeout(() => {
     check("mock button enabled", !$("mock-btn").disabled);
     $("mock-btn").click();
     check("mock starts the quiz view", vis("view-quiz"));
+    check("no hints in a mock exam", $("hint-row").hidden);
     check("mock draws 90 questions",
       $("q-counter").textContent.includes("/ 90"), $("q-counter").textContent);
 

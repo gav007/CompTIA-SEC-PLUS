@@ -353,6 +353,32 @@ button {
 }
 .confidence-btn:disabled { cursor: default; opacity: 0.65; }
 
+.hint-row { margin: -4px 0 14px; }
+.hint-btn {
+  background: white;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 8px;
+  color: var(--text-muted);
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.hint-btn:hover:not(:disabled),
+.hint-btn:focus-visible { border-color: var(--blue-border); color: var(--blue-strong); background: var(--blue-soft); }
+.hint-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.hint-btn:disabled { cursor: default; opacity: 0.55; }
+.hint-text {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  background: var(--blue-softer);
+  border-left: 3px solid var(--blue-border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+.q-answer.eliminated { opacity: 0.4; text-decoration: line-through; }
+
 .q-feedback { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 18px; }
 .feedback-banner {
   font-weight: 700;
@@ -408,6 +434,7 @@ button {
 .stat-pill.incorrect b { color: var(--red); }
 .stat-pill.guessed b { color: var(--gold); }
 .stat-pill.unsure b { color: #8a6415; }
+.stat-pill.hinted b { color: var(--blue-strong); }
 
 .results-review { text-align: left; margin-bottom: 30px; }
 .review-item {
@@ -430,6 +457,7 @@ button {
 .review-tag.wrong { background: var(--red-bg); color: var(--red); }
 .review-tag.guessed { background: #fff7e8; color: var(--gold); }
 .review-tag.unsure { background: #fff7e8; color: #8a6415; }
+.review-tag.hinted { background: var(--blue-soft); color: var(--blue-strong); }
 .review-your { font-size: 0.88rem; color: var(--red); margin: 4px 0; }
 .review-correct { font-size: 0.88rem; color: var(--green); margin: 4px 0; }
 .review-explain { font-size: 0.85rem; color: var(--text-muted); margin: 6px 0 0; }
