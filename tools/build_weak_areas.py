@@ -71,7 +71,8 @@ def main():
     recent = defaultdict(lambda: [0, 0])   # objective -> [asked, right]
     for s in sessions():
         source = s.get("source") or ""
-        retry = "Retry" in source or source.startswith(("Weak Questions", "6.0"))
+        retry = "Retry" in source                       # just saw the answer: can't graduate
+        repeat = retry or source.startswith(("Weak Questions", "6.0"))  # re-asks: keep out of objective scores
         day = (s.get("startedAt") or "")[:10]
         for q in s.get("questions", []):
             qid = q.get("questionId")
@@ -81,7 +82,7 @@ def main():
             sure = q.get("confidence") == "sure"
             history[qid].append((right and sure, not right, not retry))
             obj = tags.get(qid) or q.get("objective")
-            if obj and not retry and day >= RECENT_FROM:
+            if obj and not repeat and day >= RECENT_FROM:
                 recent[obj][0] += 1
                 recent[obj][1] += right
 
