@@ -196,6 +196,7 @@
   function allItems() {
     const out = [];
     window.DOMAINS.forEach(d => {
+      if (d.virtual) return; // 6.0 Weak Areas repeats questions from 1.0-5.0
       getBank(d.bank).forEach(q => out.push({ q, domain: d }));
     });
     return out.concat(pbqItems());

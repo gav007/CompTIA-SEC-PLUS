@@ -40,5 +40,16 @@ window.DOMAINS = [
     name: "Security Program Management and Oversight",
     blurb: "Governance, risk management, third-party risk, compliance, audits",
     bank: "domain5"
+  },
+  {
+    // Not a CompTIA domain: questions you keep missing plus unseen questions
+    // from your weakest objectives, rebuilt by tools/build_weak_areas.py.
+    // `virtual` keeps it out of the weak list and the mock exam.
+    id: "weak",
+    num: "6.0",
+    name: "Weak Areas",
+    blurb: "Your problem questions and weakest objectives, mixed. Rebuilt from your results",
+    bank: "weak",
+    virtual: true
   }
 ];

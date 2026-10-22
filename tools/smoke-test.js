@@ -123,7 +123,8 @@ setTimeout(() => {
     // A tag must belong to the domain its question sits in -- a 5.x tag on a
     // domain 2 question would scatter a domain's questions across the picker.
     let crossDomain = [];
-    loaded.forEach(dm => w.QUESTION_BANKS[dm.bank].forEach(q => {
+    // 6.0 Weak Areas is virtual: it deliberately mixes questions from every domain.
+    loaded.filter(dm => !dm.virtual).forEach(dm => w.QUESTION_BANKS[dm.bank].forEach(q => {
       const t = tags[q.id];
       if (t && objMeta[t.o] && objMeta[t.o].domain !== dm.num) crossDomain.push(q.id);
     }));
